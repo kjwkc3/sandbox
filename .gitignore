@@ -5,7 +5,7 @@ build/
 *.a
 
 # Generated files
-screenshot.png
+debug/
 
 # Odin build cache
 .cache/

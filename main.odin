@@ -8,7 +8,7 @@ import stbiw "vendor:stb/image"
 
 WINDOW_WIDTH    :: 800
 WINDOW_HEIGHT   :: 600
-SCREENSHOT_FILE :: "screenshot.png"
+SCREENSHOT_FILE :: "debug/screenshot.png"
 
 VERT_SRC :: `
 #version 330 core

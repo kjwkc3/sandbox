@@ -12,4 +12,4 @@ run: build
 	./$(BIN)
 
 clean:
-	rm -f $(BIN) screenshot.png
+	rm -rf $(BIN) debug/

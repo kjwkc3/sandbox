@@ -18,7 +18,7 @@ jobs:
       - name: Setup Odin
         uses: laytan/setup-odin@v1
         with:
-          release: latest
+          odin-version: dev
 
       - name: Install SDL2
         run: |

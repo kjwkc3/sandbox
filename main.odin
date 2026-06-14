@@ -13,16 +13,20 @@ SCREENSHOT_FILE :: "debug/screenshot.png"
 VERT_SRC :: `
 #version 330 core
 layout (location = 0) in vec2 pos;
+layout (location = 1) in vec3 color;
+out vec3 vColor;
 void main() {
     gl_Position = vec4(pos, 0.0, 1.0);
+    vColor = color;
 }
 `
 
 FRAG_SRC :: `
 #version 330 core
-out vec4 color;
+in vec3 vColor;
+out vec4 fragColor;
 void main() {
-    color = vec4(1.0, 0.5, 0.2, 1.0);
+    fragColor = vec4(vColor, 1.0);
 }
 `
 
@@ -65,14 +69,19 @@ main :: proc() {
 	gl.GenVertexArrays(1, &vao)
 	gl.GenBuffers(1, &vbo)
 
-	vertex_data := [6]f32{-0.5, -0.5, 0.5, -0.5, 0.0, 0.5}
+	vertex_data := [15]f32{-0.5, -0.5, 1.0, 0.0, 0.0, 0.5, -0.5, 0.0, 1.0, 0.0, 0.0, 0.5, 0.0, 0.0, 1.0}
+
+	stride: i32 = 5 * size_of(f32)
 
 	gl.BindVertexArray(vao)
 	gl.BindBuffer(gl.ARRAY_BUFFER, vbo)
 	gl.BufferData(gl.ARRAY_BUFFER, size_of(vertex_data), &vertex_data[0], gl.STATIC_DRAW)
 
-	gl.VertexAttribPointer(0, 2, gl.FLOAT, false, 2 * size_of(f32), uintptr(0))
+	gl.VertexAttribPointer(0, 2, gl.FLOAT, false, stride, uintptr(0))
 	gl.EnableVertexAttribArray(0)
+
+	gl.VertexAttribPointer(1, 3, gl.FLOAT, false, stride, uintptr(2 * size_of(f32)))
+	gl.EnableVertexAttribArray(1)
 
 	gl.BindBuffer(gl.ARRAY_BUFFER, 0)
 	gl.BindVertexArray(0)

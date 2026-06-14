@@ -6,8 +6,8 @@ import gl "vendor:OpenGL"
 import sdl2 "vendor:sdl2"
 import stbiw "vendor:stb/image"
 
-WINDOW_WIDTH  :: 800
-WINDOW_HEIGHT :: 600
+WINDOW_WIDTH    :: 800
+WINDOW_HEIGHT   :: 600
 SCREENSHOT_FILE :: "screenshot.png"
 
 VERT_SRC :: `

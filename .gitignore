@@ -1,5 +1,5 @@
 # Build artifacts
-hello-triangle
+build/
 *.exe
 *.o
 *.a

@@ -1,0 +1,11 @@
+# Build artifacts
+hello-triangle
+*.exe
+*.o
+*.a
+
+# Generated files
+screenshot.png
+
+# Odin build cache
+.cache/

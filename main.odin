@@ -4,13 +4,15 @@ import "core:c"
 import "core:fmt"
 import "core:math"
 import "core:os"
+import "core:path/filepath"
 import gl "vendor:OpenGL"
 import sdl2 "vendor:sdl2"
 import "png"
 
 WINDOW_WIDTH  :: 800
 WINDOW_HEIGHT :: 600
-FRAME_DIR     :: "debug/frames"
+TARGET_FPS    :: 60
+FRAME_MS      :: 1000 / TARGET_FPS
 
 VERT_SRC :: `
 #version 330 core
@@ -74,9 +76,9 @@ main :: proc() {
 	gl.GenBuffers(1, &vbo)
 
 	vertex_data := [15]f32{
-		-0.5, -0.5, 1.0, 0.0, 0.0,
-		 0.5, -0.5, 0.0, 1.0, 0.0,
-		 0.0,  0.5, 0.0, 0.0, 1.0,
+		-0.5, -0.2887, 1.0, 0.0, 0.0,
+		 0.5, -0.2887, 0.0, 1.0, 0.0,
+		 0.0,  0.5774, 0.0, 0.0, 1.0,
 	}
 
 	stride: i32 = 5 * size_of(f32)
@@ -107,6 +109,21 @@ main :: proc() {
 	frame_count := 0
 	tick: f32 = 0
 
+	show_fps := false
+	last_ticks := sdl2.GetTicks()
+	fps_frame_count := 0
+	fps_display: f32 = 0
+	last_frame_ticks := sdl2.GetTicks()
+
+	frame_dir := "debug/frames"
+	if exe_dir, err := os.get_executable_directory(context.allocator); err == nil {
+		if filepath.base(exe_dir) == "build" {
+			frame_dir = filepath.join({exe_dir, "..", "debug", "frames"}, context.allocator) or_else "debug/frames"
+		} else {
+			frame_dir = filepath.join({exe_dir, "debug", "frames"}, context.allocator) or_else "debug/frames"
+		}
+	}
+
 	fmt.println("F1 for metrics, F2 to start/stop recording, ESC to quit")
 
 	running := true
@@ -120,12 +137,19 @@ main :: proc() {
 				key := event.key.keysym.scancode
 				if key == .ESCAPE {
 					running = false
+				} else if key == .F1 {
+					show_fps = !show_fps
+					if show_fps {
+						fmt.println("FPS: enabled")
+					} else {
+						fmt.println("FPS: disabled")
+					}
 				} else if key == .F2 {
 					recording = !recording
 					if recording {
 						frame_count = 0
-						_ = os.remove_all(FRAME_DIR)
-						_ = os.make_directory_all(FRAME_DIR)
+						_ = os.remove_all(frame_dir)
+						_ = os.make_directory_all(frame_dir)
 						fmt.println("Recording started")
 					} else {
 						fmt.printf("Recording stopped: %d frames\n", frame_count)
@@ -134,7 +158,22 @@ main :: proc() {
 			}
 		}
 
-		tick += 0.02
+		now := sdl2.GetTicks()
+		dt := f32(now - last_frame_ticks) / 1000.0
+		last_frame_ticks = now
+
+		if show_fps {
+			fps_frame_count += 1
+			elapsed := now - last_ticks
+			if elapsed >= 1000 {
+				fps_display = f32(fps_frame_count) * 1000.0 / f32(elapsed)
+				fmt.printf("\rFPS: %.1f  ", fps_display)
+				last_ticks = now
+				fps_frame_count = 0
+			}
+		}
+
+		tick += dt * 2.0
 		angle := tick
 		cos_a := math.cos(angle)
 		sin_a := math.sin(angle)
@@ -154,6 +193,7 @@ main :: proc() {
 		gl.DrawArrays(gl.TRIANGLES, 0, 3)
 
 		if recording {
+			gl.Flush()
 			gl.ReadPixels(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, gl.RGBA, gl.UNSIGNED_BYTE, raw_data(pixels))
 
 			for y in 0 ..< WINDOW_HEIGHT {
@@ -164,7 +204,7 @@ main :: proc() {
 				}
 			}
 
-			frame_path := fmt.tprintf("%s/frame_%03d.png", FRAME_DIR, frame_count)
+			frame_path := fmt.tprintf("%s/frame_%03d.png", frame_dir, frame_count)
 			if png.write_png(frame_path, flipped, WINDOW_WIDTH, WINDOW_HEIGHT) {
 				fmt.printf("Frame %d: %s\n", frame_count, frame_path)
 			}
@@ -172,6 +212,11 @@ main :: proc() {
 		}
 
 		sdl2.GL_SwapWindow(window)
+
+		elapsed := sdl2.GetTicks() - last_frame_ticks
+		if elapsed < FRAME_MS {
+			sdl2.Delay(FRAME_MS - elapsed)
+		}
 	}
 
 	gl.DeleteVertexArrays(1, &vao)
@@ -179,7 +224,7 @@ main :: proc() {
 	gl.DeleteProgram(program)
 
 	if frame_count > 0 {
-		fmt.printf("Captured %d frames to %s/\n", frame_count, FRAME_DIR)
+		fmt.printf("Captured %d frames to %s/\n", frame_count, frame_dir)
 	}
 }
 

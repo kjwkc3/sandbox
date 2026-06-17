@@ -15,21 +15,17 @@ assets/dungeon/
     wall.gltf + .bin
     wall_corner.gltf + .bin
     ...                          # full KayKit glTF pack (211 meshes)
-  catalog/
-    obj/                         # optional OBJ/MTL mirror for discoverability
 ```
 
 Meshes load natively via cgltf (`.gltf` + sidecar `.bin`). Each glTF JSON references the atlas at `../texture/dungeon_texture.png`.
+
+This directory is **glTF-only** — copy meshes and the shared atlas from the KayKit pack; do not add OBJ/MTL or other interchange formats here.
 
 ## Source
 
 [KayKit Dungeon Remastered 1.1 (FREE)](https://kaylousberg.itch.io/kaykit-dungeon-remastered)
 
-Re-vendor from the itch.io download:
-
-```bash
-python3 scripts/vendor_kaykit_assets.py
-```
+Download the pack from itch.io and copy the `gltf/` meshes plus `dungeon_texture.png` into `meshes/` and `texture/` respectively.
 
 ## License
 

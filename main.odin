@@ -74,9 +74,10 @@ main :: proc() {
 
 	camera := room.room_camera(u32(draw_w), u32(draw_h))
 
-	pixels := make([]u8, WINDOW_WIDTH * WINDOW_HEIGHT * 4)
+	pixel_count := int(draw_w) * int(draw_h) * 4
+	pixels := make([]u8, pixel_count)
 	defer delete(pixels)
-	flipped := make([]u8, len(pixels))
+	flipped := make([]u8, pixel_count)
 	defer delete(flipped)
 
 	capture_on_startup := os.get_env_alloc("SANDBOX_CAPTURE", context.temp_allocator) == "1"
@@ -112,7 +113,7 @@ main :: proc() {
 				} else if key == .F2 {
 					frame_dir := resolve_frame_dir()
 					_ = os.make_directory_all(frame_dir)
-					if capture_frame(pixels, flipped, frame_dir, frame_count) {
+					if capture_frame(pixels, flipped, draw_w, draw_h, frame_dir, frame_count) {
 						fmt.printf("Captured frame_%03d.png\n", frame_count)
 						frame_count += 1
 					}
@@ -140,7 +141,7 @@ main :: proc() {
 		if capture_on_startup && !captured_startup {
 			frame_dir := resolve_frame_dir()
 			_ = os.make_directory_all(frame_dir)
-			if capture_frame(pixels, flipped, frame_dir, 0) {
+			if capture_frame(pixels, flipped, draw_w, draw_h, frame_dir, 0) {
 				fmt.println("Startup capture: debug/frames/frame_000.png")
 				captured_startup = true
 				running = false
@@ -157,19 +158,23 @@ main :: proc() {
 	}
 }
 
-capture_frame :: proc(pixels, flipped: []u8, frame_dir: string, index: int) -> bool {
+capture_frame :: proc(pixels, flipped: []u8, width, height: i32, frame_dir: string, index: int) -> bool {
+	w := int(width)
+	h := int(height)
+	row_bytes := w * 4
+
 	gl.ReadBuffer(gl.BACK)
 	gl.Flush()
-	gl.ReadPixels(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, gl.RGBA, gl.UNSIGNED_BYTE, raw_data(pixels))
+	gl.ReadPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, raw_data(pixels))
 
-	for y in 0 ..< WINDOW_HEIGHT {
-		src := y * WINDOW_WIDTH * 4
-		dst := (WINDOW_HEIGHT - 1 - y) * WINDOW_WIDTH * 4
-		copy(flipped[dst:dst + WINDOW_WIDTH * 4], pixels[src:src + WINDOW_WIDTH * 4])
+	for y in 0 ..< h {
+		src := y * row_bytes
+		dst := (h - 1 - y) * row_bytes
+		copy(flipped[dst:dst + row_bytes], pixels[src:src + row_bytes])
 	}
 
 	path := fmt.tprintf("%s/frame_%03d.png", frame_dir, index)
-	return png.write_png(path, flipped, WINDOW_WIDTH, WINDOW_HEIGHT)
+	return png.write_png(path, flipped, w, h)
 }
 
 resolve_frame_dir :: proc() -> string {

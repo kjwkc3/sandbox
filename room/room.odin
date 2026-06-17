@@ -32,6 +32,7 @@ Room :: struct {
 
 build_placements :: proc(allocator := context.allocator) -> []Placement {
 	placements := make([dynamic]Placement, allocator)
+	defer delete(placements)
 
 	for r in 0 ..< 5 {
 		for c in 0 ..< 5 {

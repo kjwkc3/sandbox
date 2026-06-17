@@ -36,6 +36,14 @@ mul :: proc(a, b: Mat4) -> Mat4 {
 	return a * b
 }
 
+quat_from_yaw :: proc(yaw_deg: f32) -> Quat {
+	return linalg.quaternion_from_euler_angle_y(yaw_deg * RAD_PER_DEG)
+}
+
+quat_to_matrix :: proc(q: Quat) -> Mat4 {
+	return linalg.matrix4_from_quaternion_f32(q)
+}
+
 normal_matrix :: proc(model: Mat4) -> linalg.Matrix3f32 {
 	m3 := linalg.Matrix3f32{
 		model[0][0], model[0][1], model[0][2],

@@ -39,12 +39,6 @@ fi
 OUT_DIR=build
 mkdir -p "$OUT_DIR"
 
-FLOOR_GLB="assets/dungeon/floor_tile_large.glb"
-FLOOR_OBJ="assets/dungeon/floor_tile_large.obj"
-if [[ ! -f "$FLOOR_GLB" ]]; then
-	python3 scripts/obj_to_glb.py "$FLOOR_OBJ" "$FLOOR_GLB"
-fi
-
 if $RELEASE; then
 	OUT="$OUT_DIR/sandbox-release"
 	odin build . -out:"$OUT" -o:speed -vet

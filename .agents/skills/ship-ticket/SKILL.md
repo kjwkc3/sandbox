@@ -48,7 +48,7 @@ The root orchestrator dispatches work; it never implements directly.
 | **Toph** | Explore | Codebase search, docs lookup |
 | **Sokka** | Plan | Implementation plan before coding |
 | **Appa** | Execute plan | Plan approved — implement step-by-step |
-| **Katara** | Surgical fix | Bug fixes, small targeted repairs |
+| **Katara** | Surgical fix | Bug fixes, small targeted repairs; debug hell → Opus debug pass |
 | **Aang** | Architect-executor | No plan + needs building; escalate after 2 Katara failures |
 | **Shell** | Git/CI ops | Commit, push, PR, merge commands |
 | **Bugbot** | Review | Readonly review of branch changes |
@@ -125,6 +125,19 @@ After plan approval:
 **Fixes during implementation:**
 - `Task(katara)` for surgical fixes
 - After **2 Katara failures** on the same issue → escalate to `Task(aang)`
+
+**Debug hell escalation** — when a bug resists normal fixes, do not re-plan the ticket or restart Phase 3 from scratch:
+
+- **Trigger:** 2+ failed fix attempts on the **same bug**, or the executor is spiraling (matrix transposes, random hypotheses, re-planning instead of fixing, hung shell probing vendor libs, etc.).
+- **Action:** STOP the current executor. Do **not** re-run Phase 2 or dispatch Sokka for a new plan.
+- **Debug pass:** `Task(katara)` or `Task(sokka)` with model `claude-opus-4-8-thinking-high` and a **DEBUG TASK ONLY** prompt:
+  - Symptom and acceptance criteria
+  - What was already tried (with outcomes)
+  - Read relevant code; run capture/build as needed
+  - Return root cause with **file:line evidence** and a minimal fix proposal — no project-management fluff
+- **Apply fix:** Dispatch the normal implementor — `Task(katara)` for surgical fixes, `Task(appa)` if the fix spans multiple files per the approved plan.
+- **Verify:** Same validation as above (build; `SANDBOX_CAPTURE` for rendering tickets).
+- **Resume:** Continue Phase 3 where you left off. Do **not** re-run Phase 2 plan approval.
 
 ### Phase 4 — Ship
 

@@ -49,7 +49,7 @@ main :: proc() {
 
 	gl.Enable(gl.DEPTH_TEST)
 	gl.Viewport(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT)
-	gl.ClearColor(0.1, 0.1, 0.15, 1.0)
+	gl.ClearColor(0.18, 0.18, 0.22, 1.0)
 
 	model_path := resolve_model_path()
 	model, ok := render.load_model(model_path)

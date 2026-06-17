@@ -136,8 +136,9 @@ draw_model :: proc(model: Model, shader: ShaderProgram, cam: Camera) {
 	set_mat4(shader, "view", mat4_to_array(view))
 	set_mat4(shader, "projection", mat4_to_array(proj))
 	set_vec3(shader, "viewPos", cam.position)
-	set_vec3(shader, "lightDir", {0.5, 1.0, 0.3})
-	set_vec3(shader, "lightColor", {1.0, 1.0, 1.0})
+	// Direction light travels (toward scene); shader uses -lightDir for surface→light.
+	set_vec3(shader, "lightDir", {0.4, -1.0, 0.3})
+	set_vec3(shader, "lightColor", {1.0, 1.0, 0.95})
 
 	for i in 0 ..< len(model.meshes) {
 		mesh := model.meshes[i]

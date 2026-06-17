@@ -1,14 +1,7 @@
+# Local tooling (e.g. downloaded Odin for CI/dev)
+.tools/
+
 # Build artifacts
-build/
-*.exe
-*.o
-*.a
-
-# Generated files
-debug/
-
-# Odin build cache
-.cache/
 
 # Dependencies
 node_modules/

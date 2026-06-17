@@ -71,6 +71,7 @@ compute_flat_normals :: proc(
 create_mesh :: proc(
 	positions: []f32,
 	normals: []f32,
+	texcoords: []f32,
 	indices: []u32,
 ) -> Mesh {
 	mesh: Mesh
@@ -88,18 +89,23 @@ create_mesh :: proc(
 		normals_to_use = compute_flat_normals(positions, indices)
 	}
 
-	stride := 6 * size_of(f32)
-	interleaved := make([]f32, vertex_count * 6, context.temp_allocator)
+	stride := 8 * size_of(f32)
+	interleaved := make([]f32, vertex_count * 8, context.temp_allocator)
 
 	for i in 0 ..< vertex_count {
 		base_v := i * 3
-		off := i * 6
+		off := i * 8
 		interleaved[off + 0] = positions[base_v + 0]
 		interleaved[off + 1] = positions[base_v + 1]
 		interleaved[off + 2] = positions[base_v + 2]
 		interleaved[off + 3] = normals_to_use[base_v + 0]
 		interleaved[off + 4] = normals_to_use[base_v + 1]
 		interleaved[off + 5] = normals_to_use[base_v + 2]
+		if len(texcoords) >= int(vertex_count) * 2 {
+			uv := i * 2
+			interleaved[off + 6] = texcoords[uv + 0]
+			interleaved[off + 7] = texcoords[uv + 1]
+		}
 	}
 
 	data_size := int(len(interleaved) * size_of(f32))
@@ -111,6 +117,9 @@ create_mesh :: proc(
 
 	gl.VertexAttribPointer(1, 3, gl.FLOAT, false, i32(stride), uintptr(3 * size_of(f32)))
 	gl.EnableVertexAttribArray(1)
+
+	gl.VertexAttribPointer(2, 2, gl.FLOAT, false, i32(stride), uintptr(6 * size_of(f32)))
+	gl.EnableVertexAttribArray(2)
 
 	if len(indices) > 0 {
 		mesh.has_indices = true

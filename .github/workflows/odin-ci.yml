@@ -28,5 +28,8 @@ jobs:
       - name: Build cgltf vendor library
         run: make -C "$(odin root)/vendor/cgltf/src" unix
 
+      - name: Build stb vendor libraries
+        run: make -C "$(odin root)/vendor/stb/src" unix
+
       - name: Vet and Build
         run: odin build . -vet -strict-style -vet-tabs -disallow-do -warnings-as-errors

@@ -27,7 +27,7 @@ Before starting, confirm these are available:
 
 | Requirement | Purpose |
 |-------------|---------|
-| **WSL** | Odin builds and `SANDBOX_CAPTURE` run in Linux |
+| **WSL** | Required for ALL shell/git/gh/linear operations (not just builds); Odin builds and `SANDBOX_CAPTURE` run in Linux |
 | **Linear MCP plugin** | Fetch issue, comment, set status |
 | **Linear CLI** (`@schpet/linear-cli`) | Fallback issue queries; see [linear-cli](../linear-cli/SKILL.md) |
 | **`gh` authenticated** | PR create, CI status, merge |
@@ -35,9 +35,12 @@ Before starting, confirm these are available:
 
 ## Human gates
 
-**Plan approval is mandatory.** After Phase 2, present the plan and **STOP**. Do not implement until the human replies with explicit approval: `approved`, `go`, or `proceed`.
+Two phases require **mandatory** human approval. Present the deliverable and **STOP** until the human replies with explicit approval: `approved`, `go`, `proceed`, or explicit merge OK.
 
-No other phase requires approval by default. Escalate to the human when scope is ambiguous, CI failures are out of PR scope, or merge would require overriding failing checks.
+1. **Plan approval (Phase 2)** — Do not implement until approved.
+2. **Merge/deploy approval (Phase 6)** — Do not run `gh pr merge` or any deploy until approved. The human may want to run the build locally, review capture/XR visuals, or give feedback before merge.
+
+Escalate to the human when scope is ambiguous, CI failures are out of PR scope, or merge would require overriding failing checks.
 
 ## Avatar Team routing
 
@@ -67,7 +70,7 @@ Phase 2 — Plan          ← STOP for human approval
 Phase 3 — Implement
 Phase 4 — Ship
 Phase 5 — Review
-Phase 6 — CI + merge
+Phase 6 — CI + merge    ← STOP for human approval
 Phase 7 — Close loop
 ```
 
@@ -176,9 +179,16 @@ Follow the **babysit** pattern (`~/.cursor/skills-cursor/babysit/SKILL.md`):
 1. Watch CI on the PR
 2. Fix in-scope failures; merge latest `main` if failures are upstream
 3. Resolve merge conflicts preserving intent
-4. **`gh pr merge`** only when CI is green and PR is mergeable
+4. When CI is green and PR is mergeable, **present to the human and STOP:**
+   - PR link
+   - CI status
+   - Capture/visual summary (frames, XR notes, or "N/A" for non-visual tickets)
+5. Wait for explicit approval (`approved`, `go`, `proceed`, or explicit merge OK). Do **not** merge until the human approves.
+6. **`gh pr merge`** only after human approval.
 
 **Never merge with failing CI** unless the human explicitly overrides.
+
+If the human gives feedback at this stage (visual tweaks, build concerns, etc.), send work back to `Task(katara)` or `Task(appa)` as appropriate, re-verify, then return to step 4 — still no merge until they approve.
 
 ### Phase 7 — Close loop
 
@@ -203,6 +213,7 @@ If capture fails or frames are blank/wrong, treat as implementation failure — 
 
 - **Scope creep** — implement only what the issue and approved plan cover
 - **Skip plan approval** — never dispatch Appa before human says go
+- **Merge without human approval** — even when CI is green; always STOP at Phase 6 and wait for explicit go
 - **Merge without green CI** — unless human explicitly overrides
 - **Root implements directly** — orchestrator dispatches Task() only
 - **Remove failing tests** or suppress types (`as any`, `@ts-ignore`) to pass
@@ -225,6 +236,11 @@ Orchestrator:
   Phase 3 — appa implemented, build OK, capture validated frame_000.png
   Phase 4 — PR #12 opened
   Phase 5 — bugbot: 1 valid fix applied
-  Phase 6 — CI green, merged
+  Phase 6 — CI green, PR #12 + capture summary presented → WAITING
+
+User: proceed
+
+Orchestrator:
+  Phase 6 — merged
   Phase 7 — Linear comment posted, KJW-6 → Done
 ```

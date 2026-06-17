@@ -7,6 +7,7 @@ This is a sandbox project for experimentation and development.
 - Follow clean code practices
 - Write meaningful commit messages
 - Test changes before committing
+- **Use WSL for all agent shell commands** — builds (`./build.sh`), `gh`, `linear-cli`, `SANDBOX_CAPTURE`, git when possible. Windows PowerShell gh is not authenticated; WSL is the canonical environment.
 
 ## Windows Build (SDL2)
 Requires a full Odin install (not just `odin.exe`) — the release zip includes `vendor/sdl2/SDL2.lib` and `SDL2.dll`.

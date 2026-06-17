@@ -1,17 +1,45 @@
-NAME := hello-triangle
+# Sandbox build (Linux / WSL)
+#
+# Prerequisites:
+#   odin on PATH
+#   SDL2 dev libs: sudo apt install libsdl2-dev
+#
+# Targets:
+#   make debug       -> build/sandbox-debug
+#   make run-debug   -> build and run
+#   make release     -> build/sandbox-release
+#
+# Windows native: use ./build.ps1 (Odin vendor SDL2.lib + SDL2.dll copy).
+
+NAME := sandbox
 BIN_DEBUG := build/$(NAME)-debug
 BIN_RELEASE := build/$(NAME)-release
 FRAME_DIR := debug/frames
+FLOOR_GLB := assets/dungeon/floor_tile_large.glb
+FLOOR_OBJ := assets/dungeon/floor_tile_large.obj
 
-.PHONY: all debug release run-debug run-release gif clean
+.PHONY: all debug release run-debug run-release gif clean check-deps assets
 
 all: debug
 
-debug:
+assets: $(FLOOR_GLB)
+
+$(FLOOR_GLB): $(FLOOR_OBJ)
+	python3 scripts/obj_to_glb.py $(FLOOR_OBJ) $(FLOOR_GLB)
+
+check-deps:
+	@command -v odin >/dev/null 2>&1 || { echo "odin not found on PATH"; exit 1; }
+	@if command -v pkg-config >/dev/null 2>&1; then \
+		pkg-config --exists sdl2 || { echo "SDL2 not found. Install: sudo apt install libsdl2-dev"; exit 1; }; \
+	elif ! ldconfig -p 2>/dev/null | grep -q 'libSDL2-2\.0\.so'; then \
+		echo "SDL2 not found. Install: sudo apt install libsdl2-dev"; exit 1; \
+	fi
+
+debug: check-deps $(FLOOR_GLB)
 	mkdir -p build
 	odin build . -out=$(BIN_DEBUG) -debug -vet
 
-release:
+release: check-deps $(FLOOR_GLB)
 	mkdir -p build
 	odin build . -out=$(BIN_RELEASE) -o:speed -vet
 

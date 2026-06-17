@@ -9,3 +9,14 @@ debug/
 
 # Odin build cache
 .cache/
+
+# Dependencies
+node_modules/
+# Editor / local IDE
+.vscode/
+
+# Local OpenCode overrides (tracked config is oh-my-opencode.json)
+.opencode/oh-my-openagent.json
+
+# Skill installer lockfile (skills vendored under .agents/)
+skills-lock.json

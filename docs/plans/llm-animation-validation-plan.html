@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>LLM Animation Validation Plan</title>
+</head>
+
+<body>
+    <h1>LLM Animation Validation Plan</h1>
+    <p>The goal is to provide an LLM with a reliable, video-like artifact for validating animation and input-driven
+        behavior, rather than continuing to debug a custom GIF encoder.</p>
+    <h2>Current State</h2>
+    <ul>
+        <li>The renderer already captures frame images in <code>debug/frames/frame_*.png</code>.</li>
+        <li>There is a custom GIF writer in <code>gif/gif.odin</code>, but it is unstable.</li>
+        <li>The useful output is the captured frame sequence, not the custom encoder output.</li>
+    </ul>
+    <h2>Recommended Approach</h2>
+    <ol>
+        <li>Keep the frame capture pipeline in the application.</li>
+        <li>Stop using <code>gif/gif.odin</code> as the primary output mechanism for LLM validation.</li>
+        <li>Convert the captured frames into an animation using external tools.</li>
+    </ol>
+    <h2>Why This Is Better</h2>
+    <ul>
+        <li>It directly solves the actual goal: producing an animation artifact.</li>
+        <li>It avoids low-level GIF codec debugging.</li>
+        <li>It leverages existing, reliable tools such as <code>ffmpeg</code> or ImageMagick.</li>
+        <li>It is easier to maintain and more portable.</li>
+    </ul>
+    <h2>Proposed Workflow</h2>
+    <ol>
+        <li>Capture frames in the app and write them to <code>debug/frames</code>.</li>
+        <li>Add external conversion commands to create a final animation file:</li>
+        <ul>
+            <li>GIF: <code>convert -delay 5 -loop 0 debug/frames/frame_*.png debug/animation.gif</code></li>
+            <li>MP4:
+                <code>ffmpeg -framerate 12 -i debug/frames/frame_%03d.png -c:v libx264 -pix_fmt yuv420p debug/animation.mp4</code>
+            </li>
+        </ul>
+        <li>Expose the workflow with build targets such as <code>make debug</code>, <code>make frames</code>, and
+            <code>make video</code>.</li>
+        <li>Optionally add metadata logging for input events and frame timing if the LLM needs to validate input
+            sequences.</li>
+    </ol>
+    <h2>Handoff Instructions</h2>
+    <ol>
+        <li>Validate and improve the frame capture/export pipeline.</li>
+        <li>Implement build targets and conversion commands.</li>
+        <li>Create a stable animation artifact from the captured frames.</li>
+        <li>Optionally add metadata output for input/action validation.</li>
+    </ol>
+    <h2>Summary</h2>
+    <p>Focus on reliable frame capture and external animation generation. Avoid spending more time on the custom GIF
+        encoder until the animation workflow is stable.</p>
+</body>
+
+</html>

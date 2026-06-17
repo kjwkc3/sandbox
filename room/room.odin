@@ -50,10 +50,10 @@ build_placements :: proc(allocator := context.allocator) -> []Placement {
 		}
 	}
 
-	append(&placements, Placement{.WallCorner, render.transform_with_yaw({PERIM_MIN, 0, PERIM_MIN}, 0)})
-	append(&placements, Placement{.WallCorner, render.transform_with_yaw({PERIM_MAX, 0, PERIM_MIN}, 270)})
-	append(&placements, Placement{.WallCorner, render.transform_with_yaw({PERIM_MAX, 0, PERIM_MAX}, 180)})
-	append(&placements, Placement{.WallCorner, render.transform_with_yaw({PERIM_MIN, 0, PERIM_MAX}, 90)})
+	append(&placements, Placement{.WallCorner, render.transform_with_yaw({PERIM_MIN, 0, PERIM_MIN}, 90)})
+	append(&placements, Placement{.WallCorner, render.transform_with_yaw({PERIM_MAX, 0, PERIM_MIN}, 0)})
+	append(&placements, Placement{.WallCorner, render.transform_with_yaw({PERIM_MAX, 0, PERIM_MAX}, 270)})
+	append(&placements, Placement{.WallCorner, render.transform_with_yaw({PERIM_MIN, 0, PERIM_MAX}, 180)})
 
 	for x in 1 ..< 4 {
 		append(&placements, Placement{.Wall, render.transform_with_yaw({f32(x * TILE_SIZE), 0, PERIM_MIN}, 180)})

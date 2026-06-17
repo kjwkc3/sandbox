@@ -12,6 +12,10 @@ FLOOR_MESH :: "assets/dungeon/meshes/floor_tile_large.gltf"
 WALL_MESH :: "assets/dungeon/meshes/wall.gltf"
 WALL_CORNER_MESH :: "assets/dungeon/meshes/wall_corner.gltf"
 
+TILE_SIZE :: 4
+PERIM_MIN :: -2
+PERIM_MAX :: 18
+
 ModelKind :: enum {
 	Floor,
 	Wall,
@@ -46,22 +50,22 @@ build_placements :: proc(allocator := context.allocator) -> []Placement {
 		}
 	}
 
-	append(&placements, Placement{.WallCorner, render.transform_with_yaw({0, 0, 0}, 0)})
-	append(&placements, Placement{.WallCorner, render.transform_with_yaw({16, 0, 0}, 270)})
-	append(&placements, Placement{.WallCorner, render.transform_with_yaw({16, 0, 16}, 180)})
-	append(&placements, Placement{.WallCorner, render.transform_with_yaw({0, 0, 16}, 90)})
+	append(&placements, Placement{.WallCorner, render.transform_with_yaw({PERIM_MIN, 0, PERIM_MIN}, 0)})
+	append(&placements, Placement{.WallCorner, render.transform_with_yaw({PERIM_MAX, 0, PERIM_MIN}, 270)})
+	append(&placements, Placement{.WallCorner, render.transform_with_yaw({PERIM_MAX, 0, PERIM_MAX}, 180)})
+	append(&placements, Placement{.WallCorner, render.transform_with_yaw({PERIM_MIN, 0, PERIM_MAX}, 90)})
 
 	for x in 1 ..< 4 {
-		append(&placements, Placement{.Wall, render.transform_with_yaw({f32(x * 4), 0, 0}, 180)})
+		append(&placements, Placement{.Wall, render.transform_with_yaw({f32(x * TILE_SIZE), 0, PERIM_MIN}, 180)})
 	}
 	for x in 1 ..< 4 {
-		append(&placements, Placement{.Wall, render.transform_with_yaw({f32(x * 4), 0, 16}, 0)})
+		append(&placements, Placement{.Wall, render.transform_with_yaw({f32(x * TILE_SIZE), 0, PERIM_MAX}, 0)})
 	}
 	for z in 1 ..< 4 {
-		append(&placements, Placement{.Wall, render.transform_with_yaw({0, 0, f32(z * 4)}, 90)})
+		append(&placements, Placement{.Wall, render.transform_with_yaw({PERIM_MIN, 0, f32(z * TILE_SIZE)}, 90)})
 	}
 	for z in 1 ..< 4 {
-		append(&placements, Placement{.Wall, render.transform_with_yaw({16, 0, f32(z * 4)}, 270)})
+		append(&placements, Placement{.Wall, render.transform_with_yaw({PERIM_MAX, 0, f32(z * TILE_SIZE)}, 270)})
 	}
 
 	result := make([]Placement, len(placements), allocator)
@@ -149,13 +153,13 @@ delete_room :: proc(room: Room) {
 
 room_camera :: proc(width, height: u32) -> render.Camera {
 	target := math3d.Vec3{8, 0, 8}
-	distance: f32 = 10
-	elevation: f32 = 10
+	distance: f32 = 18
+	elevation: f32 = 16
 	return render.Camera{
 		position = target + math3d.Vec3{distance, elevation, distance},
 		target   = target,
 		up       = {0, 1, 0},
-		fov_deg  = 45,
+		fov_deg  = 38,
 		near     = 0.1,
 		far      = 200,
 		aspect   = f32(width) / f32(height),

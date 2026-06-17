@@ -1,5 +1,7 @@
 package render
 
+import "core:math"
+
 import gl "vendor:OpenGL"
 
 Mesh :: struct {
@@ -7,6 +9,63 @@ Mesh :: struct {
 	vertex_count:  i32,
 	index_count:   i32,
 	has_indices:   bool,
+}
+
+compute_flat_normals :: proc(
+	positions: []f32,
+	indices: []u32,
+	allocator := context.temp_allocator,
+) -> []f32 {
+	vertex_count := len(positions) / 3
+	normals := make([]f32, vertex_count * 3, allocator)
+
+	if len(indices) >= 3 {
+		for t in 0 ..< len(indices) / 3 {
+			i0 := int(indices[t * 3 + 0])
+			i1 := int(indices[t * 3 + 1])
+			i2 := int(indices[t * 3 + 2])
+
+			ax := positions[i1 * 3 + 0] - positions[i0 * 3 + 0]
+			ay := positions[i1 * 3 + 1] - positions[i0 * 3 + 1]
+			az := positions[i1 * 3 + 2] - positions[i0 * 3 + 2]
+			bx := positions[i2 * 3 + 0] - positions[i0 * 3 + 0]
+			by := positions[i2 * 3 + 1] - positions[i0 * 3 + 1]
+			bz := positions[i2 * 3 + 2] - positions[i0 * 3 + 2]
+
+			nx := ay * bz - az * by
+			ny := az * bx - ax * bz
+			nz := ax * by - ay * bx
+
+			normals[i0 * 3 + 0] += nx
+			normals[i0 * 3 + 1] += ny
+			normals[i0 * 3 + 2] += nz
+			normals[i1 * 3 + 0] += nx
+			normals[i1 * 3 + 1] += ny
+			normals[i1 * 3 + 2] += nz
+			normals[i2 * 3 + 0] += nx
+			normals[i2 * 3 + 1] += ny
+			normals[i2 * 3 + 2] += nz
+		}
+
+		for i in 0 ..< vertex_count {
+			x := normals[i * 3 + 0]
+			y := normals[i * 3 + 1]
+			z := normals[i * 3 + 2]
+			length := math.sqrt(x * x + y * y + z * z)
+			if length == 0 {
+				length = 1
+			}
+			normals[i * 3 + 0] = x / length
+			normals[i * 3 + 1] = y / length
+			normals[i * 3 + 2] = z / length
+		}
+	} else {
+		for i in 0 ..< vertex_count {
+			normals[i * 3 + 1] = 1
+		}
+	}
+
+	return normals
 }
 
 create_mesh :: proc(
@@ -24,38 +83,34 @@ create_mesh :: proc(
 	vertex_count := i32(len(positions) / 3)
 	mesh.vertex_count = vertex_count
 
-	if len(normals) > 0 {
-		stride := 6 * size_of(f32)
-		interleaved := make([]f32, vertex_count * 6, context.temp_allocator)
-
-		for i in 0 ..< vertex_count {
-			base_v := i * 3
-			off := i * 6
-			interleaved[off + 0] = positions[base_v + 0]
-			interleaved[off + 1] = positions[base_v + 1]
-			interleaved[off + 2] = positions[base_v + 2]
-			interleaved[off + 3] = normals[base_v + 0]
-			interleaved[off + 4] = normals[base_v + 1]
-			interleaved[off + 5] = normals[base_v + 2]
-		}
-
-		data_size := int(len(interleaved) * size_of(f32))
-		gl.BindBuffer(gl.ARRAY_BUFFER, mesh.vbo)
-		gl.BufferData(gl.ARRAY_BUFFER, data_size, raw_data(interleaved), gl.STATIC_DRAW)
-
-		gl.VertexAttribPointer(0, 3, gl.FLOAT, false, i32(stride), uintptr(0))
-		gl.EnableVertexAttribArray(0)
-
-		gl.VertexAttribPointer(1, 3, gl.FLOAT, false, i32(stride), uintptr(3 * size_of(f32)))
-		gl.EnableVertexAttribArray(1)
-	} else {
-		data_size := int(vertex_count * 3 * size_of(f32))
-		gl.BindBuffer(gl.ARRAY_BUFFER, mesh.vbo)
-		gl.BufferData(gl.ARRAY_BUFFER, data_size, raw_data(positions), gl.STATIC_DRAW)
-
-		gl.VertexAttribPointer(0, 3, gl.FLOAT, false, 3 * size_of(f32), uintptr(0))
-		gl.EnableVertexAttribArray(0)
+	normals_to_use := normals
+	if len(normals_to_use) == 0 && vertex_count > 0 {
+		normals_to_use = compute_flat_normals(positions, indices)
 	}
+
+	stride := 6 * size_of(f32)
+	interleaved := make([]f32, vertex_count * 6, context.temp_allocator)
+
+	for i in 0 ..< vertex_count {
+		base_v := i * 3
+		off := i * 6
+		interleaved[off + 0] = positions[base_v + 0]
+		interleaved[off + 1] = positions[base_v + 1]
+		interleaved[off + 2] = positions[base_v + 2]
+		interleaved[off + 3] = normals_to_use[base_v + 0]
+		interleaved[off + 4] = normals_to_use[base_v + 1]
+		interleaved[off + 5] = normals_to_use[base_v + 2]
+	}
+
+	data_size := int(len(interleaved) * size_of(f32))
+	gl.BindBuffer(gl.ARRAY_BUFFER, mesh.vbo)
+	gl.BufferData(gl.ARRAY_BUFFER, data_size, raw_data(interleaved), gl.STATIC_DRAW)
+
+	gl.VertexAttribPointer(0, 3, gl.FLOAT, false, i32(stride), uintptr(0))
+	gl.EnableVertexAttribArray(0)
+
+	gl.VertexAttribPointer(1, 3, gl.FLOAT, false, i32(stride), uintptr(3 * size_of(f32)))
+	gl.EnableVertexAttribArray(1)
 
 	if len(indices) > 0 {
 		mesh.has_indices = true

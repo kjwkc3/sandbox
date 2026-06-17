@@ -76,6 +76,7 @@ load_model :: proc(path: cstring, allocator := context.allocator) -> (Model, boo
 		}
 	}
 
+	loaded_count := 0
 	for i in 0 ..< len(data.meshes) {
 		mesh_data := &data.meshes[i]
 		model.transforms[i] = default_transform()
@@ -108,6 +109,23 @@ load_model :: proc(path: cstring, allocator := context.allocator) -> (Model, boo
 		}
 
 		model.meshes[i] = create_mesh(positions, normals, indices)
+		if len(indices) > 0 {
+			delete(indices)
+		}
+
+		m := model.meshes[i]
+		if m.vertex_count > 0 || m.has_indices {
+			loaded_count += 1
+		}
+	}
+
+	if loaded_count == 0 {
+		fmt.printf("cgltf: no meshes loaded from %s\n", path)
+		delete(model.meshes)
+		delete(model.materials)
+		delete(model.transforms)
+		delete(model.material_indices)
+		return {}, false
 	}
 
 	return model, true

@@ -101,8 +101,9 @@ main :: proc() {
 						fmt.println("FPS: disabled")
 					}
 				} else if key == .F2 {
-					_ = os.make_directory_all(FRAME_DIR)
-					if capture_frame(pixels, flipped, frame_count) {
+					frame_dir := resolve_frame_dir()
+					_ = os.make_directory_all(frame_dir)
+					if capture_frame(pixels, flipped, frame_dir, frame_count) {
 						fmt.printf("Captured frame_%03d.png\n", frame_count)
 						frame_count += 1
 					}
@@ -128,8 +129,9 @@ main :: proc() {
 		render.draw_model(model, shader, camera)
 
 		if capture_on_startup && !captured_startup {
-			_ = os.make_directory_all(FRAME_DIR)
-			if capture_frame(pixels, flipped, 0) {
+			frame_dir := resolve_frame_dir()
+			_ = os.make_directory_all(frame_dir)
+			if capture_frame(pixels, flipped, frame_dir, 0) {
 				fmt.println("Startup capture: debug/frames/frame_000.png")
 				captured_startup = true
 				running = false
@@ -146,7 +148,8 @@ main :: proc() {
 	}
 }
 
-capture_frame :: proc(pixels, flipped: []u8, index: int) -> bool {
+capture_frame :: proc(pixels, flipped: []u8, frame_dir: string, index: int) -> bool {
+	gl.Flush()
 	gl.ReadPixels(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, gl.RGBA, gl.UNSIGNED_BYTE, raw_data(pixels))
 
 	for y in 0 ..< WINDOW_HEIGHT {
@@ -155,8 +158,18 @@ capture_frame :: proc(pixels, flipped: []u8, index: int) -> bool {
 		copy(flipped[dst:dst + WINDOW_WIDTH * 4], pixels[src:src + WINDOW_WIDTH * 4])
 	}
 
-	path := fmt.tprintf("%s/frame_%03d.png", FRAME_DIR, index)
+	path := fmt.tprintf("%s/frame_%03d.png", frame_dir, index)
 	return png.write_png(path, flipped, WINDOW_WIDTH, WINDOW_HEIGHT)
+}
+
+resolve_frame_dir :: proc() -> string {
+	if exe_dir, err := os.get_executable_directory(context.temp_allocator); err == nil {
+		dir := filepath.join({exe_dir, "debug", "frames"}, context.temp_allocator) or_else ""
+		if dir != "" {
+			return dir
+		}
+	}
+	return FRAME_DIR
 }
 
 resolve_model_path :: proc() -> cstring {

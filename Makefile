@@ -15,10 +15,17 @@ NAME := sandbox
 BIN_DEBUG := build/$(NAME)-debug
 BIN_RELEASE := build/$(NAME)-release
 FRAME_DIR := debug/frames
+FLOOR_GLB := assets/dungeon/floor_tile_large.glb
+FLOOR_OBJ := assets/dungeon/floor_tile_large.obj
 
-.PHONY: all debug release run-debug run-release gif clean check-deps
+.PHONY: all debug release run-debug run-release gif clean check-deps assets
 
 all: debug
+
+assets: $(FLOOR_GLB)
+
+$(FLOOR_GLB): $(FLOOR_OBJ)
+	python3 scripts/obj_to_glb.py $(FLOOR_OBJ) $(FLOOR_GLB)
 
 check-deps:
 	@command -v odin >/dev/null 2>&1 || { echo "odin not found on PATH"; exit 1; }
@@ -28,11 +35,11 @@ check-deps:
 		echo "SDL2 not found. Install: sudo apt install libsdl2-dev"; exit 1; \
 	fi
 
-debug: check-deps
+debug: check-deps $(FLOOR_GLB)
 	mkdir -p build
 	odin build . -out=$(BIN_DEBUG) -debug -vet
 
-release: check-deps
+release: check-deps $(FLOOR_GLB)
 	mkdir -p build
 	odin build . -out=$(BIN_RELEASE) -o:speed -vet
 

@@ -2,16 +2,16 @@ package render
 
 import "core:math"
 
-import "math3d"
+import "../math3d"
 
 Camera :: struct {
-	position:    math3d.Vec3,
-	target:      math3d.Vec3,
-	up:          math3d.Vec3,
-	fov_deg:     f32,
-	near:        f32,
-	far:         f32,
-	aspect:      f32,
+	position: math3d.Vec3,
+	target:   math3d.Vec3,
+	up:       math3d.Vec3,
+	fov_deg:  f32,
+	near:     f32,
+	far:      f32,
+	aspect:   f32,
 }
 
 default_camera :: proc(width, height: u32) -> Camera {
@@ -48,13 +48,14 @@ isometric_camera :: proc(distance: f32, height: f32) -> Camera {
 }
 
 rotate_around_target :: proc(cam: Camera, angle_deg: f32) -> Camera {
+	result := cam
 	rad := angle_deg * math3d.RAD_PER_DEG
-	offset := cam.position - cam.target
+	offset := result.position - result.target
 	dist := math.sqrt(offset[0] * offset[0] + offset[2] * offset[2])
 
 	new_x := f32(math.cos(f64(rad))) * dist
 	new_z := f32(math.sin(f64(rad))) * dist
 
-	cam.position = cam.target + math3d.Vec3{new_x, offset[1], new_z}
-	return cam
+	result.position = result.target + math3d.Vec3{new_x, offset[1], new_z}
+	return result
 }

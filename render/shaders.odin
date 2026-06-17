@@ -1,6 +1,5 @@
 package render
 
-import "core:c"
 import gl "vendor:OpenGL"
 
 ShaderProgram :: struct {
@@ -113,12 +112,14 @@ use_shader :: proc(shader: ShaderProgram) {
 
 set_mat4 :: proc(shader: ShaderProgram, name: cstring, mat: [16]f32) {
 	loc := gl.GetUniformLocation(shader.id, name)
-	gl.UniformMatrix4fv(loc, 1, false, &mat[0])
+	m := mat
+	gl.UniformMatrix4fv(loc, 1, false, raw_data(m[:]))
 }
 
 set_mat3 :: proc(shader: ShaderProgram, name: cstring, mat: [9]f32) {
 	loc := gl.GetUniformLocation(shader.id, name)
-	gl.UniformMatrix3fv(loc, 1, false, &mat[0])
+	m := mat
+	gl.UniformMatrix3fv(loc, 1, false, raw_data(m[:]))
 }
 
 set_vec3 :: proc(shader: ShaderProgram, name: cstring, v: [3]f32) {

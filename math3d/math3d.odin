@@ -2,12 +2,14 @@ package math3d
 
 import "core:math/linalg"
 
-Vec3  :: linalg.Vector3f32
-Mat4  :: linalg.Matrix4f32
-Quat  :: linalg.Quaternionf32
+Vec3 :: linalg.Vector3f32
+Mat4 :: linalg.Matrix4f32
+Quat :: linalg.Quaternionf32
+
+RAD_PER_DEG :: linalg.RAD_PER_DEG
 
 perspective :: proc(fovy_deg, aspect, near, far: f32) -> Mat4 {
-	return linalg.matrix4_perspective_f32(fovy_deg * linalg.RAD_PER_DEG, aspect, near, far)
+	return linalg.matrix4_perspective_f32(fovy_deg * RAD_PER_DEG, aspect, near, far)
 }
 
 look_at :: proc(eye, center, up: Vec3) -> Mat4 {
@@ -19,7 +21,7 @@ translate :: proc(v: Vec3) -> Mat4 {
 }
 
 rotate :: proc(angle_deg: f32, axis: Vec3) -> Mat4 {
-	return linalg.matrix4_rotate_f32(angle_deg * linalg.RAD_PER_DEG, axis)
+	return linalg.matrix4_rotate_f32(angle_deg * RAD_PER_DEG, axis)
 }
 
 scale :: proc(v: Vec3) -> Mat4 {

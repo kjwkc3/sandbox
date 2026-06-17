@@ -1,4 +1,4 @@
-NAME := hello-triangle
+NAME := sandbox
 BIN_DEBUG := build/$(NAME)-debug
 BIN_RELEASE := build/$(NAME)-release
 FRAME_DIR := debug/frames

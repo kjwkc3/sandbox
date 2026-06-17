@@ -19,6 +19,20 @@ Requires a full Odin install (not just `odin.exe`) — the release zip includes 
 If you set `ODIN_ROOT`, omit the trailing backslash. Linux CI installs SDL2 via `libsdl2-dev`; Windows uses Odin's bundled vendor libs.
 
 ## Tools Available
-- Oh My OpenCode plugin with multi-agent orchestration
+- **Cursor Avatar Team** — multi-agent orchestration via root dispatcher (`~/.cursor/rules/orchestrator.mdc`)
+- **Linear MCP + linear-cli** — issue tracking and ticket workflow
+- **`/ship-ticket KJW-N`** — end-to-end delivery skill (see `.agents/skills/ship-ticket/SKILL.md`)
 - LSP support for code analysis
 - Background agents for parallel tasks
+
+## Agent Skills
+
+Project skills live under `.agents/skills/`. Key workflows:
+
+| Skill | Invoke | Purpose |
+|-------|--------|---------|
+| ship-ticket | `/ship-ticket KJW-5` | Ship a Linear ticket through explore → plan → implement → PR → merge |
+| triage | `/triage` | Issue triage state machine |
+| linear-cli | (ambient) | Linear CLI reference |
+| diagnose | `/diagnose` | Structured bug diagnosis |
+| tdd | `/tdd` | Test-driven development loop |

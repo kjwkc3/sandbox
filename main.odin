@@ -8,12 +8,14 @@ import "core:strings"
 import gl "vendor:OpenGL"
 import sdl2 "vendor:sdl2"
 
+import "png"
 import "render"
 
 WINDOW_WIDTH  :: 800
 WINDOW_HEIGHT :: 600
 TARGET_FPS    :: 60
 FRAME_MS      :: 1000 / TARGET_FPS
+FRAME_DIR     :: "debug/frames"
 
 MODEL_PATH :: "assets/dungeon/floor_tile_large.glb"
 
@@ -61,9 +63,18 @@ main :: proc() {
 	shader := render.create_shader(render.MODEL_VERT, render.MODEL_FRAG)
 	defer render.delete_shader(shader)
 
-	camera := render.isometric_camera(12, 10)
+	camera := render.isometric_camera(6, 8, WINDOW_WIDTH, WINDOW_HEIGHT)
 
-	fmt.println("F1 for FPS, ESC to quit")
+	pixels := make([]u8, WINDOW_WIDTH * WINDOW_HEIGHT * 4)
+	defer delete(pixels)
+	flipped := make([]u8, len(pixels))
+	defer delete(flipped)
+
+	capture_on_startup := os.get_env_alloc("SANDBOX_CAPTURE", context.temp_allocator) == "1"
+	captured_startup := false
+	frame_count := 0
+
+	fmt.println("F1 for FPS, F2 to capture PNG, ESC to quit")
 
 	show_fps := false
 	last_ticks := sdl2.GetTicks()
@@ -89,6 +100,12 @@ main :: proc() {
 					} else {
 						fmt.println("FPS: disabled")
 					}
+				} else if key == .F2 {
+					_ = os.make_directory_all(FRAME_DIR)
+					if capture_frame(pixels, flipped, frame_count) {
+						fmt.printf("Captured frame_%03d.png\n", frame_count)
+						frame_count += 1
+					}
 				}
 			}
 		}
@@ -110,6 +127,15 @@ main :: proc() {
 		render.use_shader(shader)
 		render.draw_model(model, shader, camera)
 
+		if capture_on_startup && !captured_startup {
+			_ = os.make_directory_all(FRAME_DIR)
+			if capture_frame(pixels, flipped, 0) {
+				fmt.println("Startup capture: debug/frames/frame_000.png")
+				captured_startup = true
+				running = false
+			}
+		}
+
 		sdl2.GL_SwapWindow(window)
 
 		elapsed_frame := sdl2.GetTicks() - last_frame_ticks
@@ -118,6 +144,19 @@ main :: proc() {
 		}
 		last_frame_ticks = sdl2.GetTicks()
 	}
+}
+
+capture_frame :: proc(pixels, flipped: []u8, index: int) -> bool {
+	gl.ReadPixels(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, gl.RGBA, gl.UNSIGNED_BYTE, raw_data(pixels))
+
+	for y in 0 ..< WINDOW_HEIGHT {
+		src := y * WINDOW_WIDTH * 4
+		dst := (WINDOW_HEIGHT - 1 - y) * WINDOW_WIDTH * 4
+		copy(flipped[dst:dst + WINDOW_WIDTH * 4], pixels[src:src + WINDOW_WIDTH * 4])
+	}
+
+	path := fmt.tprintf("%s/frame_%03d.png", FRAME_DIR, index)
+	return png.write_png(path, flipped, WINDOW_WIDTH, WINDOW_HEIGHT)
 }
 
 resolve_model_path :: proc() -> cstring {

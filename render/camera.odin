@@ -34,16 +34,16 @@ projection_matrix :: proc(cam: Camera) -> math3d.Mat4 {
 	return math3d.perspective(cam.fov_deg, cam.aspect, cam.near, cam.far)
 }
 
-isometric_camera :: proc(distance: f32, height: f32) -> Camera {
+isometric_camera :: proc(distance, height: f32, width, height_px: u32) -> Camera {
 	pos := math3d.Vec3{distance, height, distance}
 	return Camera{
 		position = pos,
 		target   = {0, 0, 0},
 		up       = {0, 1, 0},
-		fov_deg  = 45,
+		fov_deg  = 38,
 		near     = 0.1,
 		far      = 200,
-		aspect   = 800.0 / 600.0,
+		aspect   = f32(width) / f32(height_px),
 	}
 }
 

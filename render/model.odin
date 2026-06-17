@@ -137,8 +137,8 @@ draw_model :: proc(model: Model, shader: ShaderProgram, cam: Camera) {
 	set_mat4(shader, "projection", mat4_to_array(proj))
 	set_vec3(shader, "viewPos", cam.position)
 	// Direction light travels (toward scene); shader uses -lightDir for surface→light.
-	set_vec3(shader, "lightDir", {0.4, -1.0, 0.3})
-	set_vec3(shader, "lightColor", {1.0, 1.0, 0.95})
+	set_vec3(shader, "lightDir", {0.35, -1.0, 0.45})
+	set_vec3(shader, "lightColor", {1.0, 0.98, 0.92})
 
 	for i in 0 ..< len(model.meshes) {
 		mesh := model.meshes[i]
@@ -157,7 +157,13 @@ draw_model :: proc(model: Model, shader: ShaderProgram, cam: Camera) {
 			mat_idx = 0
 		}
 		color := model.materials[mat_idx].base_color
-		set_vec3(shader, "objectColor", {color[0], color[1], color[2]})
+		// KayKit stone tint when textures are not loaded yet.
+		object_color := [3]f32{color[0], color[1], color[2]}
+		luma := object_color[0] * 0.299 + object_color[1] * 0.587 + object_color[2] * 0.114
+		if luma < 0.25 {
+			object_color = {0.78, 0.74, 0.66}
+		}
+		set_vec3(shader, "objectColor", object_color)
 
 		draw_mesh(mesh)
 	}

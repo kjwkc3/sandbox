@@ -55,17 +55,17 @@ build_placements :: proc(allocator := context.allocator) -> []Placement {
 	append(&placements, Placement{.WallCorner, render.transform_with_yaw({PERIM_MAX, 0, PERIM_MAX}, 270)})
 	append(&placements, Placement{.WallCorner, render.transform_with_yaw({PERIM_MIN, 0, PERIM_MAX}, 180)})
 
-	for x in 1 ..< 4 {
-		append(&placements, Placement{.Wall, render.transform_with_yaw({f32(x * TILE_SIZE), 0, PERIM_MIN}, 180)})
+	for x in 1 ..< 5 {
+		append(&placements, Placement{.Wall, render.transform_with_yaw({PERIM_MIN + f32(x * TILE_SIZE), 0, PERIM_MIN}, 180)})
 	}
-	for x in 1 ..< 4 {
-		append(&placements, Placement{.Wall, render.transform_with_yaw({f32(x * TILE_SIZE), 0, PERIM_MAX}, 0)})
+	for x in 1 ..< 5 {
+		append(&placements, Placement{.Wall, render.transform_with_yaw({PERIM_MIN + f32(x * TILE_SIZE), 0, PERIM_MAX}, 0)})
 	}
-	for z in 1 ..< 4 {
-		append(&placements, Placement{.Wall, render.transform_with_yaw({PERIM_MIN, 0, f32(z * TILE_SIZE)}, 90)})
+	for z in 1 ..< 5 {
+		append(&placements, Placement{.Wall, render.transform_with_yaw({PERIM_MIN, 0, PERIM_MIN + f32(z * TILE_SIZE)}, 90)})
 	}
-	for z in 1 ..< 4 {
-		append(&placements, Placement{.Wall, render.transform_with_yaw({PERIM_MAX, 0, f32(z * TILE_SIZE)}, 270)})
+	for z in 1 ..< 5 {
+		append(&placements, Placement{.Wall, render.transform_with_yaw({PERIM_MAX, 0, PERIM_MIN + f32(z * TILE_SIZE)}, 270)})
 	}
 
 	result := make([]Placement, len(placements), allocator)

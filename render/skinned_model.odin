@@ -369,8 +369,14 @@ load_skinned_model :: proc(
 	if len(meshes) == 0 {
 		fmt.printf("cgltf: no skinned meshes loaded from %s\n", path)
 		delete(model.materials)
+		delete(model.rig.joint_node_indices)
+		delete(model.rig.inverse_bind_matrices)
 		delete(model.rest_poses)
 		for clip in model.clips {
+			for channel in clip.channels {
+				delete(channel.key_times)
+				delete(channel.key_values)
+			}
 			delete(clip.channels)
 		}
 		delete(model.clips)

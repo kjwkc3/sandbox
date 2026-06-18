@@ -172,6 +172,10 @@ main :: proc() {
 				if captured_frames >= capture_frame_target {
 					running = false
 				}
+			} else {
+				fmt.eprintf("Startup capture: failed to write %s/frame_%03d.png\n", frame_dir, captured_frames)
+				capture_on_startup = false
+				running = false
 			}
 		}
 

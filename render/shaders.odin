@@ -66,6 +66,43 @@ void main() {
 }
 `
 
+MAX_SHADER_JOINTS :: 64
+
+SKINNED_VERT :: `
+#version 330 core
+layout (location = 0) in vec3 aPos;
+layout (location = 1) in vec3 aNormal;
+layout (location = 2) in vec2 aTexCoord;
+layout (location = 3) in vec4 aJoints;
+layout (location = 4) in vec4 aWeights;
+
+uniform mat4 model;
+uniform mat4 view;
+uniform mat4 projection;
+uniform mat3 normalMat;
+uniform mat4 jointMatrices[64];
+
+out vec3 FragPos;
+out vec3 Normal;
+out vec2 TexCoord;
+
+void main() {
+    mat4 skinMat =
+        jointMatrices[int(aJoints.x)] * aWeights.x +
+        jointMatrices[int(aJoints.y)] * aWeights.y +
+        jointMatrices[int(aJoints.z)] * aWeights.z +
+        jointMatrices[int(aJoints.w)] * aWeights.w;
+
+    vec4 skinnedPos = skinMat * vec4(aPos, 1.0);
+    vec3 skinnedNormal = mat3(skinMat) * aNormal;
+
+    FragPos = vec3(model * skinnedPos);
+    Normal = normalMat * skinnedNormal;
+    TexCoord = aTexCoord;
+    gl_Position = projection * view * vec4(FragPos, 1.0);
+}
+`
+
 compile_shader :: proc(source: cstring, shader_type: u32) -> u32 {
 	shader := gl.CreateShader(shader_type)
 	src := source
@@ -122,6 +159,11 @@ set_mat4 :: proc(shader: ShaderProgram, name: cstring, mat: [16]f32) {
 	loc := gl.GetUniformLocation(shader.id, name)
 	m := mat
 	gl.UniformMatrix4fv(loc, 1, false, raw_data(m[:]))
+}
+
+set_mat4_array :: proc(shader: ShaderProgram, name: cstring, mats: []f32, count: int) {
+	loc := gl.GetUniformLocation(shader.id, name)
+	gl.UniformMatrix4fv(loc, i32(count), false, raw_data(mats))
 }
 
 set_mat3 :: proc(shader: ShaderProgram, name: cstring, mat: [9]f32) {

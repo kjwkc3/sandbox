@@ -19,12 +19,27 @@ CHARACTER_SCALE :: f32(1.0)
 TURN_STIFFNESS :: f32(12.0)
 MOVE_EPSILON :: f32(0.001)
 
+JUMP_VELOCITY :: f32(6.5)
+GRAVITY :: f32(-24.0)
+JUMP_START_DURATION :: f32(0.6)
+JUMP_LAND_DURATION :: f32(0.67)
+
+Jump_Phase :: enum {
+	Grounded,
+	Jump_Start,
+	Jump_Idle,
+	Jump_Land,
+}
+
 Character :: struct {
 	model:              render.SkinnedModel,
 	position:           math3d.Vec3,
 	yaw:                f32,
 	move_speed:         f32,
 	derived_walk_speed: f32,
+	velocity_y:         f32,
+	jump_phase:         Jump_Phase,
+	jump_phase_time:    f32,
 }
 
 resolve_asset_path :: proc(relative: string, allocator := context.temp_allocator) -> cstring {
@@ -75,6 +90,7 @@ load_character :: proc(cache: ^render.TextureCache, allocator := context.allocat
 		yaw = CHARACTER_YAW,
 		move_speed = derived_speed,
 		derived_walk_speed = derived_speed,
+		jump_phase = .Grounded,
 	}, true
 }
 
@@ -100,6 +116,76 @@ smooth_yaw_toward :: proc(c: ^Character, target_yaw: f32, dt: f32) {
 	}
 	turn_factor := 1.0 - math.exp(-TURN_STIFFNESS * dt)
 	c.yaw += diff * turn_factor
+}
+
+@(private="file")
+is_airborne :: proc(c: Character) -> bool {
+	return c.position.y > FOOT_OFFSET_Y + MOVE_EPSILON
+}
+
+@(private="file")
+can_jump :: proc(c: Character) -> bool {
+	if c.jump_phase == .Jump_Start || c.jump_phase == .Jump_Idle {
+		return false
+	}
+	if c.jump_phase == .Jump_Land {
+		return false
+	}
+	return c.velocity_y <= MOVE_EPSILON && !is_airborne(c)
+}
+
+try_jump :: proc(c: ^Character) {
+	if !can_jump(c^) {
+		return
+	}
+	c.velocity_y = JUMP_VELOCITY
+	c.jump_phase = .Jump_Start
+	c.jump_phase_time = 0
+}
+
+@(private="file")
+advance_jump_phase :: proc(c: ^Character, dt: f32) {
+	c.jump_phase_time += dt
+
+	switch c.jump_phase {
+	case .Jump_Start:
+		if c.jump_phase_time >= JUMP_START_DURATION {
+			if is_airborne(c^) {
+				c.jump_phase = .Jump_Idle
+			} else if c.jump_phase == .Jump_Start {
+				c.jump_phase = .Grounded
+			}
+			c.jump_phase_time = 0
+		}
+	case .Jump_Land:
+		if c.jump_phase_time >= JUMP_LAND_DURATION {
+			c.jump_phase = .Grounded
+			c.jump_phase_time = 0
+		}
+	case .Grounded, .Jump_Idle:
+		break
+	}
+}
+
+update_character_physics :: proc(c: ^Character, dt: f32) {
+	was_airborne := is_airborne(c^) || c.jump_phase == .Jump_Idle ||
+		(c.jump_phase == .Jump_Start && c.velocity_y > MOVE_EPSILON)
+
+	if c.jump_phase == .Jump_Start || c.jump_phase == .Jump_Idle || c.velocity_y != 0 || was_airborne {
+		c.velocity_y += GRAVITY * dt
+		c.position.y += c.velocity_y * dt
+	}
+
+	if c.position.y <= FOOT_OFFSET_Y {
+		c.position.y = FOOT_OFFSET_Y
+		if c.velocity_y < 0 && was_airborne {
+			c.jump_phase = .Jump_Land
+			c.jump_phase_time = 0
+		}
+		c.velocity_y = 0
+	}
+
+	advance_jump_phase(c, dt)
 }
 
 move_character :: proc(
@@ -129,11 +215,9 @@ move_character :: proc(
 
 		dx := c.position.x - old_x
 		dz := c.position.z - old_z
-		c.position.y = FOOT_OFFSET_Y
 		return dx * dx + dz * dz > MOVE_EPSILON * MOVE_EPSILON
 	}
 
-	c.position.y = FOOT_OFFSET_Y
 	return false
 }
 
@@ -158,6 +242,21 @@ face_toward_dir :: proc(c: ^Character, dir: math3d.Vec3, dt: f32) {
 	smooth_yaw_toward(c, target_yaw, dt)
 }
 
+@(private="file")
+select_jump_clip_index :: proc(c: Character) -> int {
+	switch c.jump_phase {
+	case .Jump_Start:
+		return c.model.jump_start_clip_index
+	case .Jump_Idle:
+		return c.model.jump_idle_clip_index
+	case .Jump_Land:
+		return c.model.jump_land_clip_index
+	case .Grounded:
+		return -1
+	}
+	return -1
+}
+
 draw_character :: proc(
 	character: Character,
 	shader: render.ShaderProgram,
@@ -167,19 +266,36 @@ draw_character :: proc(
 ) {
 	render.bind_frame(shader, cam)
 
-	clip_index := character.model.idle_clip_index
-	if is_moving {
-		walk_index := character.model.walk_clip_index
-		if walk_index >= 0 {
-			clip_index = walk_index
+	clip_index := -1
+	playback_time := anim_time
+	use_walk_scale := false
+
+	if jump_clip := select_jump_clip_index(character); jump_clip >= 0 {
+		clip_index = jump_clip
+		switch character.jump_phase {
+		case .Jump_Start, .Jump_Land:
+			playback_time = character.jump_phase_time
+		case .Jump_Idle:
+			playback_time = anim_time
+		case .Grounded:
+			break
+		}
+	} else if character.jump_phase == .Grounded {
+		clip_index = character.model.idle_clip_index
+		if is_moving {
+			walk_index := character.model.walk_clip_index
+			if walk_index >= 0 {
+				clip_index = walk_index
+				use_walk_scale = true
+			}
 		}
 	}
+
 	if clip_index < 0 || clip_index >= len(character.model.clips) {
 		return
 	}
 
-	playback_time := anim_time
-	if is_moving {
+	if use_walk_scale {
 		playback_time *= walk_anim_speed_scale(character)
 	}
 

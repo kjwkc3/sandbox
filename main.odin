@@ -112,7 +112,7 @@ main :: proc() {
 	manual_frame_count := 0
 	anim_time: f32 = 0
 
-	fmt.println("WASD to move, mouse to aim, F1 for FPS, F2 to capture PNG, ESC to quit")
+	fmt.println("WASD to move, SPACE to jump, mouse to aim, F1 for FPS, F2 to capture PNG, ESC to quit")
 
 	show_fps := false
 	last_ticks := sdl2.GetTicks()
@@ -198,9 +198,13 @@ main :: proc() {
 				move_dir.x -= cam_right.x
 				move_dir.z -= cam_right.z
 			}
+			if keyboard[sdl2.Scancode.SPACE] != 0 {
+				character.try_jump(&knight)
+			}
 		}
 
 		is_moving := character.move_character(&knight, move_dir, dt, wall_colliders)
+		character.update_character_physics(&knight, dt)
 
 		if capture_on_startup {
 			character.face_toward_dir(&knight, move_dir, dt)

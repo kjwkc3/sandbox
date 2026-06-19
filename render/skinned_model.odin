@@ -16,8 +16,11 @@ SkinnedModel :: struct {
 	rest_poses:       []NodePose,
 	node_names:       []string,
 	clips:            []AnimationClip,
-	idle_clip_index:  int,
-	walk_clip_index:  int,
+	idle_clip_index:       int,
+	walk_clip_index:       int,
+	jump_start_clip_index: int,
+	jump_idle_clip_index:  int,
+	jump_land_clip_index:  int,
 }
 
 has_skinned_attributes :: proc(attributes: []cgltf.attribute) -> bool {
@@ -327,6 +330,9 @@ load_skinned_model :: proc(
 	model.clips = parse_animations(data, allocator)
 	model.idle_clip_index = find_idle_clip_index(model.clips)
 	model.walk_clip_index = find_walk_clip_index(model.clips)
+	model.jump_start_clip_index = find_jump_start_clip_index(model.clips)
+	model.jump_idle_clip_index = find_jump_idle_clip_index(model.clips)
+	model.jump_land_clip_index = find_jump_land_clip_index(model.clips)
 
 	skin: ^cgltf.skin
 	if len(data.skins) > 0 {

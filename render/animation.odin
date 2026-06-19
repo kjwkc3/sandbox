@@ -94,6 +94,27 @@ find_walk_clip_index :: proc(clips: []AnimationClip) -> int {
 	return find_idle_clip_index(clips)
 }
 
+find_jump_start_clip_index :: proc(clips: []AnimationClip) -> int {
+	if idx := find_clip_by_name(clips, "Jump_Start"); idx >= 0 {
+		return idx
+	}
+	return -1
+}
+
+find_jump_idle_clip_index :: proc(clips: []AnimationClip) -> int {
+	if idx := find_clip_by_name(clips, "Jump_Idle"); idx >= 0 {
+		return idx
+	}
+	return -1
+}
+
+find_jump_land_clip_index :: proc(clips: []AnimationClip) -> int {
+	if idx := find_clip_by_name(clips, "Jump_Land"); idx >= 0 {
+		return idx
+	}
+	return -1
+}
+
 sample_channel :: proc(channel: AnimChannel, time: f32, pose: ^NodePose) {
 	if len(channel.key_times) == 0 {
 		return

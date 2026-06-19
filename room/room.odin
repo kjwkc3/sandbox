@@ -5,6 +5,7 @@ import "core:os"
 import "core:path/filepath"
 import "core:strings"
 
+import "../collision"
 import "../render"
 import "../math3d"
 
@@ -55,22 +56,98 @@ build_placements :: proc(allocator := context.allocator) -> []Placement {
 	append(&placements, Placement{.WallCorner, render.transform_with_yaw({PERIM_MAX, 0, PERIM_MAX}, 270)})
 	append(&placements, Placement{.WallCorner, render.transform_with_yaw({PERIM_MIN, 0, PERIM_MAX}, 180)})
 
-	for x in 1 ..< 5 {
+	// Five 4-unit segments per side (centers -2..14) so walls overlap corner inner edges.
+	for x in 0 ..< 5 {
 		append(&placements, Placement{.Wall, render.transform_with_yaw({PERIM_MIN + f32(x * TILE_SIZE), 0, PERIM_MIN}, 180)})
 	}
-	for x in 1 ..< 5 {
+	for x in 0 ..< 5 {
 		append(&placements, Placement{.Wall, render.transform_with_yaw({PERIM_MIN + f32(x * TILE_SIZE), 0, PERIM_MAX}, 0)})
 	}
-	for z in 1 ..< 5 {
+	for z in 0 ..< 5 {
 		append(&placements, Placement{.Wall, render.transform_with_yaw({PERIM_MIN, 0, PERIM_MIN + f32(z * TILE_SIZE)}, 90)})
 	}
-	for z in 1 ..< 5 {
+	for z in 0 ..< 5 {
 		append(&placements, Placement{.Wall, render.transform_with_yaw({PERIM_MAX, 0, PERIM_MIN + f32(z * TILE_SIZE)}, 270)})
 	}
 
 	result := make([]Placement, len(placements), allocator)
 	copy(result, placements[:])
 	return result
+}
+
+// KayKit wall / wall_corner mesh local bounds (from glTF accessors).
+WALL_LOCAL_MIN :: math3d.Vec3{-2, 0, -0.5}
+WALL_LOCAL_MAX :: math3d.Vec3{2, 4, 0.5}
+// L-corner arms: union matches solid mesh without the empty interior quadrant.
+CORNER_ARM_ALONG_X_MIN :: math3d.Vec3{-2, 0, -0.5}
+CORNER_ARM_ALONG_X_MAX :: math3d.Vec3{0.5, 4, 0.5}
+CORNER_ARM_ALONG_Z_MIN :: math3d.Vec3{-2, 0, -0.5}
+CORNER_ARM_ALONG_Z_MAX :: math3d.Vec3{-0.5, 4, 2}
+
+@(private="file")
+transform_point :: proc(m: math3d.Mat4, p: math3d.Vec3) -> math3d.Vec3 {
+	return {
+		m[0][0] * p.x + m[0][1] * p.y + m[0][2] * p.z + m[0][3],
+		m[1][0] * p.x + m[1][1] * p.y + m[1][2] * p.z + m[1][3],
+		m[2][0] * p.x + m[2][1] * p.y + m[2][2] * p.z + m[2][3],
+	}
+}
+
+@(private="file")
+transform_local_aabb :: proc(min_pt, max_pt: math3d.Vec3, transform: render.Transform) -> collision.AABB {
+	corners: [8]math3d.Vec3
+	corners[0] = {min_pt.x, min_pt.y, min_pt.z}
+	corners[1] = {max_pt.x, min_pt.y, min_pt.z}
+	corners[2] = {min_pt.x, max_pt.y, min_pt.z}
+	corners[3] = {max_pt.x, max_pt.y, min_pt.z}
+	corners[4] = {min_pt.x, min_pt.y, max_pt.z}
+	corners[5] = {max_pt.x, min_pt.y, max_pt.z}
+	corners[6] = {min_pt.x, max_pt.y, max_pt.z}
+	corners[7] = {max_pt.x, max_pt.y, max_pt.z}
+
+	m := render.transform_matrix(transform)
+	world_min := math3d.Vec3{1e9, 1e9, 1e9}
+	world_max := math3d.Vec3{-1e9, -1e9, -1e9}
+
+	for corner in corners {
+		world := transform_point(m, corner)
+		world_min.x = min(world_min.x, world.x)
+		world_min.y = min(world_min.y, world.y)
+		world_min.z = min(world_min.z, world.z)
+		world_max.x = max(world_max.x, world.x)
+		world_max.y = max(world_max.y, world.y)
+		world_max.z = max(world_max.z, world.z)
+	}
+
+	return collision.AABB{min = world_min, max = world_max}
+}
+
+@(private="file")
+append_placement_colliders :: proc(colliders: ^[dynamic]collision.AABB, placement: Placement) {
+	switch placement.kind {
+	case .Floor:
+		return
+	case .Wall:
+		append(colliders, transform_local_aabb(WALL_LOCAL_MIN, WALL_LOCAL_MAX, placement.transform))
+	case .WallCorner:
+		append(
+			colliders,
+			transform_local_aabb(CORNER_ARM_ALONG_X_MIN, CORNER_ARM_ALONG_X_MAX, placement.transform),
+		)
+		append(
+			colliders,
+			transform_local_aabb(CORNER_ARM_ALONG_Z_MIN, CORNER_ARM_ALONG_Z_MAX, placement.transform),
+		)
+	}
+}
+
+room_wall_colliders :: proc(allocator := context.allocator) -> []collision.AABB {
+	placements := build_placements(context.temp_allocator)
+	colliders := make([dynamic]collision.AABB, allocator)
+	for placement in placements {
+		append_placement_colliders(&colliders, placement)
+	}
+	return colliders[:]
 }
 
 resolve_asset_path :: proc(relative: string, allocator := context.temp_allocator) -> cstring {

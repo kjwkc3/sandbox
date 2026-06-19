@@ -2,6 +2,7 @@ package render
 
 import "core:c"
 import "core:fmt"
+import "core:strings"
 
 import cgltf "vendor:cgltf"
 
@@ -13,8 +14,13 @@ SkinnedModel :: struct {
 	material_indices: []int,
 	rig:              SkinRig,
 	rest_poses:       []NodePose,
+	node_names:       []string,
 	clips:            []AnimationClip,
-	idle_clip_index:  int,
+	idle_clip_index:       int,
+	walk_clip_index:       int,
+	jump_start_clip_index: int,
+	jump_idle_clip_index:  int,
+	jump_land_clip_index:  int,
 }
 
 has_skinned_attributes :: proc(attributes: []cgltf.attribute) -> bool {
@@ -160,6 +166,17 @@ parse_node_poses :: proc(data: ^cgltf.data, allocator := context.allocator) -> [
 	return poses
 }
 
+parse_node_names :: proc(data: ^cgltf.data, allocator := context.allocator) -> []string {
+	names := make([]string, len(data.nodes), allocator)
+	for i in 0 ..< len(data.nodes) {
+		node := &data.nodes[i]
+		if node.name != nil {
+			names[i] = strings.clone_from_cstring(node.name, allocator)
+		}
+	}
+	return names
+}
+
 parse_skin_rig :: proc(
 	data: ^cgltf.data,
 	skin: ^cgltf.skin,
@@ -225,8 +242,11 @@ parse_animations :: proc(data: ^cgltf.data, allocator := context.allocator) -> [
 
 	for anim_i in 0 ..< len(data.animations) {
 		anim := &data.animations[anim_i]
-		clip := AnimationClip{
-			name = anim.name != nil ? string(anim.name) : fmt.tprintf("anim_%d", anim_i),
+		clip := AnimationClip{}
+		if anim.name != nil {
+			clip.name = strings.clone_from_cstring(anim.name, allocator)
+		} else {
+			clip.name = fmt.tprintf("anim_%d", anim_i)
 		}
 
 		channels := make([dynamic]AnimChannel, allocator)
@@ -306,8 +326,13 @@ load_skinned_model :: proc(
 
 	load_skinned_material_textures(data, gltf_path, cache, &model)
 	model.rest_poses = parse_node_poses(data, allocator)
+	model.node_names = parse_node_names(data, allocator)
 	model.clips = parse_animations(data, allocator)
 	model.idle_clip_index = find_idle_clip_index(model.clips)
+	model.walk_clip_index = find_walk_clip_index(model.clips)
+	model.jump_start_clip_index = find_jump_start_clip_index(model.clips)
+	model.jump_idle_clip_index = find_jump_idle_clip_index(model.clips)
+	model.jump_land_clip_index = find_jump_land_clip_index(model.clips)
 
 	skin: ^cgltf.skin
 	if len(data.skins) > 0 {
@@ -372,6 +397,7 @@ load_skinned_model :: proc(
 		delete(model.rig.joint_node_indices)
 		delete(model.rig.inverse_bind_matrices)
 		delete(model.rest_poses)
+		delete(model.node_names)
 		for clip in model.clips {
 			for channel in clip.channels {
 				delete(channel.key_times)
@@ -470,6 +496,7 @@ delete_skinned_model :: proc(model: SkinnedModel) {
 	delete(model.rig.joint_node_indices)
 	delete(model.rig.inverse_bind_matrices)
 	delete(model.rest_poses)
+	delete(model.node_names)
 	for clip in model.clips {
 		for channel in clip.channels {
 			delete(channel.key_times)

@@ -15,9 +15,13 @@ KNIGHT_MESH :: "assets/character/meshes/Knight.glb"
 FOOT_OFFSET_Y :: f32(1.12)
 CHARACTER_YAW :: f32(0)
 CHARACTER_SCALE :: f32(1.0)
-MOVE_SPEED :: f32(6.0)
+// ~12 u/s crosses the 16-unit walkable floor in ~1.3 s — responsive isometric ARPG pace
+// (Diablo/PoE-style locomotion; was 6 u/s / ~2.7 s, felt sluggish).
+MOVE_SPEED :: f32(12.0)
 TURN_STIFFNESS :: f32(12.0)
 MOVE_EPSILON :: f32(0.001)
+// KayKit Walking_A stride rate assumed at the old 6 u/s; scale playback to match MOVE_SPEED.
+WALK_ANIM_SPEED_SCALE :: MOVE_SPEED / 6.0
 
 Character :: struct {
 	model:    render.SkinnedModel,
@@ -146,12 +150,17 @@ draw_character :: proc(
 		return
 	}
 
+	playback_time := anim_time
+	if is_moving {
+		playback_time *= WALK_ANIM_SPEED_SCALE
+	}
+
 	joint_matrices: [render.MAX_JOINTS]math3d.Mat4
 	joint_count := render.compute_joint_matrices(
 		character.model.rest_poses,
 		character.model.rig,
 		character.model.clips[clip_index],
-		anim_time,
+		playback_time,
 		&joint_matrices,
 	)
 

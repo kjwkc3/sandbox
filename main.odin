@@ -175,7 +175,7 @@ main :: proc() {
 				cam_forward.x *= inv_len
 				cam_forward.z *= inv_len
 			}
-			cam_right := math3d.Vec3{cam_forward.z, 0, -cam_forward.x}
+			cam_right := math3d.Vec3{-cam_forward.z, 0, cam_forward.x}
 
 			if keyboard[sdl2.Scancode.W] != 0 {
 				move_dir.x += cam_forward.x

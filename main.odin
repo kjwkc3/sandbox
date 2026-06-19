@@ -2,6 +2,7 @@ package main
 
 import "core:c"
 import "core:fmt"
+import "core:math"
 import "core:os"
 import "core:path/filepath"
 import "core:strconv"
@@ -9,6 +10,7 @@ import gl "vendor:OpenGL"
 import sdl2 "vendor:sdl2"
 
 import "character"
+import "math3d"
 import "png"
 import "render"
 import "room"
@@ -20,6 +22,7 @@ FRAME_MS      :: 1000 / TARGET_FPS
 FRAME_DIR     :: "debug/frames"
 CAPTURE_DT    :: f32(1.0 / 24.0)
 DEFAULT_CAPTURE_FRAMES :: 24
+CAMERA_OFFSET :: math3d.Vec3{18, 16, 18}
 
 main :: proc() {
 	if sdl2.Init(sdl2.INIT_VIDEO) != 0 {
@@ -106,7 +109,7 @@ main :: proc() {
 	manual_frame_count := 0
 	anim_time: f32 = 0
 
-	fmt.println("F1 for FPS, F2 to capture PNG, ESC to quit")
+	fmt.println("WASD to move, F1 for FPS, F2 to capture PNG, ESC to quit")
 
 	show_fps := false
 	last_ticks := sdl2.GetTicks()
@@ -116,6 +119,18 @@ main :: proc() {
 
 	running := true
 	for running {
+		now := sdl2.GetTicks()
+		dt: f32
+		if capture_on_startup {
+			dt = CAPTURE_DT
+		} else {
+			elapsed_frame := now - last_frame_ticks
+			dt = f32(elapsed_frame) / 1000.0
+			if dt > 0.1 {
+				dt = 0.1
+			}
+		}
+
 		event: sdl2.Event
 		for sdl2.PollEvent(&event) {
 			#partial switch event.type {
@@ -143,7 +158,49 @@ main :: proc() {
 			}
 		}
 
-		now := sdl2.GetTicks()
+		move_dir := math3d.Vec3{0, 0, 0}
+		if capture_on_startup {
+			angle := f32(captured_frames) * 0.35
+			move_dir = {math.cos(angle), 0, math.sin(angle)}
+		} else {
+			keyboard := sdl2.GetKeyboardState(nil)
+			cam_forward := camera.target - camera.position
+			cam_forward.y = 0
+			forward_len_sq := cam_forward.x * cam_forward.x + cam_forward.z * cam_forward.z
+			if forward_len_sq > 0.0001 {
+				inv_len := 1.0 / math.sqrt(forward_len_sq)
+				cam_forward.x *= inv_len
+				cam_forward.z *= inv_len
+			}
+			cam_right := math3d.Vec3{cam_forward.z, 0, -cam_forward.x}
+
+			if keyboard[sdl2.Scancode.W] != 0 {
+				move_dir.x += cam_forward.x
+				move_dir.z += cam_forward.z
+			}
+			if keyboard[sdl2.Scancode.S] != 0 {
+				move_dir.x -= cam_forward.x
+				move_dir.z -= cam_forward.z
+			}
+			if keyboard[sdl2.Scancode.D] != 0 {
+				move_dir.x += cam_right.x
+				move_dir.z += cam_right.z
+			}
+			if keyboard[sdl2.Scancode.A] != 0 {
+				move_dir.x -= cam_right.x
+				move_dir.z -= cam_right.z
+			}
+		}
+
+		character.move_character(&knight, move_dir, dt)
+
+		move_len_sq := move_dir.x * move_dir.x + move_dir.z * move_dir.z
+		is_moving := move_len_sq > character.MOVE_EPSILON * character.MOVE_EPSILON
+
+		focus := math3d.Vec3{knight.position.x, 0, knight.position.z}
+		render.camera_follow(&camera, focus, CAMERA_OFFSET, dt, render.CAM_FOLLOW_STIFFNESS)
+
+		now = sdl2.GetTicks()
 		if show_fps {
 			fps_frame_count += 1
 			elapsed := now - last_ticks
@@ -161,7 +218,7 @@ main :: proc() {
 		room.draw_room(dungeon_room, room_shader, camera)
 
 		render.use_shader(skinned_shader)
-		character.draw_character(knight, skinned_shader, camera, anim_time)
+		character.draw_character(knight, skinned_shader, camera, anim_time, is_moving)
 
 		if capture_on_startup {
 			frame_dir := resolve_frame_dir()
@@ -181,15 +238,13 @@ main :: proc() {
 
 		sdl2.GL_SwapWindow(window)
 
-		if capture_on_startup {
-			anim_time += CAPTURE_DT
-		} else {
-			elapsed_frame := sdl2.GetTicks() - last_frame_ticks
+		anim_time += dt
+		if !capture_on_startup {
+			elapsed_frame := sdl2.GetTicks() - now
 			if elapsed_frame < FRAME_MS {
 				sdl2.Delay(FRAME_MS - elapsed_frame)
 			}
 			last_frame_ticks = sdl2.GetTicks()
-			anim_time += f32(elapsed_frame) / 1000.0
 		}
 	}
 }

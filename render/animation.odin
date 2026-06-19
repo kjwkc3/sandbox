@@ -72,6 +72,23 @@ find_idle_clip_index :: proc(clips: []AnimationClip) -> int {
 	return -1
 }
 
+// KayKit Knight GLB exposes Walking_A/B/C; Walking_A is the default forward walk cycle.
+find_walk_clip_index :: proc(clips: []AnimationClip) -> int {
+	if idx := find_clip_by_name(clips, "Walking_A"); idx >= 0 {
+		return idx
+	}
+	if idx := find_clip_by_name(clips, "Walk"); idx >= 0 {
+		return idx
+	}
+	for clip, i in clips {
+		lower := strings.to_lower(clip.name, context.temp_allocator)
+		if strings.contains(lower, "walking") {
+			return i
+		}
+	}
+	return find_idle_clip_index(clips)
+}
+
 sample_channel :: proc(channel: AnimChannel, time: f32, pose: ^NodePose) {
 	if len(channel.key_times) == 0 {
 		return

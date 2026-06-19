@@ -1,6 +1,7 @@
 package character
 
 import "core:fmt"
+import "core:math"
 import "core:os"
 import "core:path/filepath"
 import "core:strings"
@@ -14,9 +15,14 @@ KNIGHT_MESH :: "assets/character/meshes/Knight.glb"
 FOOT_OFFSET_Y :: f32(1.12)
 CHARACTER_YAW :: f32(0)
 CHARACTER_SCALE :: f32(1.0)
+MOVE_SPEED :: f32(6.0)
+TURN_STIFFNESS :: f32(12.0)
+MOVE_EPSILON :: f32(0.001)
 
 Character :: struct {
-	model: render.SkinnedModel,
+	model:    render.SkinnedModel,
+	position: math3d.Vec3,
+	yaw:      f32,
 }
 
 resolve_asset_path :: proc(relative: string, allocator := context.temp_allocator) -> cstring {
@@ -47,11 +53,46 @@ load_character :: proc(cache: ^render.TextureCache, allocator := context.allocat
 		fmt.println("Failed to load knight character")
 		return {}, false
 	}
-	return Character{model = model}, true
+	return Character{
+		model = model,
+		position = {8, FOOT_OFFSET_Y, 8},
+		yaw = CHARACTER_YAW,
+	}, true
 }
 
-character_transform :: proc() -> render.Transform {
-	return render.transform_with_yaw({8, FOOT_OFFSET_Y, 8}, CHARACTER_YAW)
+character_transform :: proc(c: Character) -> render.Transform {
+	return render.transform_with_yaw(c.position, c.yaw)
+}
+
+move_character :: proc(c: ^Character, move_dir: math3d.Vec3, dt: f32) {
+	dir := move_dir
+	dir.y = 0
+
+	len_sq := dir.x * dir.x + dir.z * dir.z
+	if len_sq > MOVE_EPSILON * MOVE_EPSILON {
+		inv_len := 1.0 / math.sqrt(len_sq)
+		dir.x *= inv_len
+		dir.z *= inv_len
+
+		c.position.x += dir.x * MOVE_SPEED * dt
+		c.position.z += dir.z * MOVE_SPEED * dt
+
+		c.position.x = math.clamp(c.position.x, -1, 17)
+		c.position.z = math.clamp(c.position.z, -1, 17)
+
+		target_yaw := math.atan2(dir.x, dir.z) * math3d.RAD_PER_DEG
+		diff := target_yaw - c.yaw
+		for diff > 180 {
+			diff -= 360
+		}
+		for diff < -180 {
+			diff += 360
+		}
+		turn_factor := 1.0 - math.exp(-TURN_STIFFNESS * dt)
+		c.yaw += diff * turn_factor
+	}
+
+	c.position.y = FOOT_OFFSET_Y
 }
 
 draw_character :: proc(
@@ -59,10 +100,17 @@ draw_character :: proc(
 	shader: render.ShaderProgram,
 	cam: render.Camera,
 	anim_time: f32,
+	is_moving: bool,
 ) {
 	render.bind_frame(shader, cam)
 
 	clip_index := character.model.idle_clip_index
+	if is_moving {
+		walk_index := character.model.walk_clip_index
+		if walk_index >= 0 {
+			clip_index = walk_index
+		}
+	}
 	if clip_index < 0 || clip_index >= len(character.model.clips) {
 		return
 	}
@@ -76,7 +124,7 @@ draw_character :: proc(
 		&joint_matrices,
 	)
 
-	transform := character_transform()
+	transform := character_transform(character)
 	transform.scale = {CHARACTER_SCALE, CHARACTER_SCALE, CHARACTER_SCALE}
 	render.draw_skinned_model_at(
 		character.model,

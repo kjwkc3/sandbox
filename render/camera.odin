@@ -4,6 +4,8 @@ import "core:math"
 
 import "../math3d"
 
+CAM_FOLLOW_STIFFNESS :: f32(10.0)
+
 Camera :: struct {
 	position: math3d.Vec3,
 	target:   math3d.Vec3,
@@ -45,6 +47,14 @@ isometric_camera :: proc(distance, height: f32, width, height_px: u32) -> Camera
 		far      = 200,
 		aspect   = f32(width) / f32(height_px),
 	}
+}
+
+camera_follow :: proc(cam: ^Camera, focus: math3d.Vec3, offset: math3d.Vec3, dt: f32, stiffness: f32) {
+	factor := 1.0 - math.exp(-stiffness * dt)
+	cam.target.x = math.lerp(cam.target.x, focus.x, factor)
+	cam.target.y = focus.y
+	cam.target.z = math.lerp(cam.target.z, focus.z, factor)
+	cam.position = cam.target + offset
 }
 
 rotate_around_target :: proc(cam: Camera, angle_deg: f32) -> Camera {

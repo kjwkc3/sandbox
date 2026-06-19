@@ -15,6 +15,7 @@ SkinnedModel :: struct {
 	rest_poses:       []NodePose,
 	clips:            []AnimationClip,
 	idle_clip_index:  int,
+	walk_clip_index:  int,
 }
 
 has_skinned_attributes :: proc(attributes: []cgltf.attribute) -> bool {
@@ -308,6 +309,7 @@ load_skinned_model :: proc(
 	model.rest_poses = parse_node_poses(data, allocator)
 	model.clips = parse_animations(data, allocator)
 	model.idle_clip_index = find_idle_clip_index(model.clips)
+	model.walk_clip_index = find_walk_clip_index(model.clips)
 
 	skin: ^cgltf.skin
 	if len(data.skins) > 0 {

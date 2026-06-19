@@ -15,13 +15,13 @@ KNIGHT_MESH :: "assets/character/meshes/Knight.glb"
 FOOT_OFFSET_Y :: f32(1.12)
 CHARACTER_YAW :: f32(0)
 CHARACTER_SCALE :: f32(1.0)
-// ~12 u/s crosses the 16-unit walkable floor in ~1.3 s — responsive isometric ARPG pace
-// (Diablo/PoE-style locomotion; was 6 u/s / ~2.7 s, felt sluggish).
-MOVE_SPEED :: f32(12.0)
+// ~18 u/s crosses the 16-unit walkable floor in ~0.9 s (Diablo/PoE small-arena pace).
+// Requires correct frame dt (~16 ms); prior bug measured ~1 ms and made any MOVE_SPEED feel sluggish.
+MOVE_SPEED :: f32(18.0)
 TURN_STIFFNESS :: f32(12.0)
 MOVE_EPSILON :: f32(0.001)
-// KayKit Walking_A stride rate assumed at the old 6 u/s; scale playback to match MOVE_SPEED.
-WALK_ANIM_SPEED_SCALE :: MOVE_SPEED / 6.0
+// Walking_A at 1× playback matches ~18 u/s stride; scale if MOVE_SPEED changes.
+WALK_ANIM_SPEED_SCALE :: MOVE_SPEED / 18.0
 
 Character :: struct {
 	model:    render.SkinnedModel,

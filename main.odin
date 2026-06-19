@@ -124,14 +124,16 @@ main :: proc() {
 		if capture_on_startup {
 			dt = CAPTURE_DT
 		} else {
+			// dt spans previous frame_start → this frame_start (includes pacing delay).
 			elapsed_frame := frame_start - last_frame_ticks
 			if elapsed_frame <= 0 {
-				elapsed_frame = 1
+				elapsed_frame = FRAME_MS
 			}
 			dt = f32(elapsed_frame) / 1000.0
 			if dt > 0.1 {
 				dt = 0.1
 			}
+			last_frame_ticks = frame_start
 		}
 
 		event: sdl2.Event
@@ -261,7 +263,6 @@ main :: proc() {
 			if frame_elapsed < FRAME_MS {
 				sdl2.Delay(FRAME_MS - frame_elapsed)
 			}
-			last_frame_ticks = sdl2.GetTicks()
 		}
 	}
 }

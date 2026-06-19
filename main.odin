@@ -82,6 +82,9 @@ main :: proc() {
 	}
 	defer character.delete_character(knight)
 
+	wall_colliders := room.room_wall_colliders()
+	defer delete(wall_colliders)
+
 	room_shader := render.create_shader(render.MODEL_VERT, render.MODEL_FRAG)
 	defer render.delete_shader(room_shader)
 
@@ -197,7 +200,7 @@ main :: proc() {
 			}
 		}
 
-		is_moving := character.move_character(&knight, move_dir, dt)
+		is_moving := character.move_character(&knight, move_dir, dt, wall_colliders)
 
 		if capture_on_startup {
 			character.face_toward_dir(&knight, move_dir, dt)

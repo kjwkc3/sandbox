@@ -1,10 +1,12 @@
 package room
 
 import "core:fmt"
+import "core:math"
 import "core:os"
 import "core:path/filepath"
 import "core:strings"
 
+import "../collision"
 import "../render"
 import "../math3d"
 
@@ -71,6 +73,96 @@ build_placements :: proc(allocator := context.allocator) -> []Placement {
 	result := make([]Placement, len(placements), allocator)
 	copy(result, placements[:])
 	return result
+}
+
+// KayKit wall / wall_corner mesh local bounds (from glTF accessors).
+WALL_LOCAL_MIN :: math3d.Vec3{-2, 0, -0.5}
+WALL_LOCAL_MAX :: math3d.Vec3{2, 4, 0.5}
+CORNER_LOCAL_MIN :: math3d.Vec3{-2, 0, -0.5}
+CORNER_LOCAL_MAX :: math3d.Vec3{0.5, 4, 2}
+
+@(private="file")
+transform_bounds_yaw :: proc(min_pt, max_pt: math3d.Vec3, yaw_deg: f32) -> collision.AABB {
+	corners: [8]math3d.Vec3
+	corners[0] = {min_pt.x, min_pt.y, min_pt.z}
+	corners[1] = {max_pt.x, min_pt.y, min_pt.z}
+	corners[2] = {min_pt.x, max_pt.y, min_pt.z}
+	corners[3] = {max_pt.x, max_pt.y, min_pt.z}
+	corners[4] = {min_pt.x, min_pt.y, max_pt.z}
+	corners[5] = {max_pt.x, min_pt.y, max_pt.z}
+	corners[6] = {min_pt.x, max_pt.y, max_pt.z}
+	corners[7] = {max_pt.x, max_pt.y, max_pt.z}
+
+	yaw_rad := yaw_deg * math3d.RAD_PER_DEG
+	cos_y := math.cos(yaw_rad)
+	sin_y := math.sin(yaw_rad)
+
+	world_min := math3d.Vec3{1e9, 1e9, 1e9}
+	world_max := math3d.Vec3{-1e9, -1e9, -1e9}
+
+	for corner in corners {
+		rx := corner.x * cos_y - corner.z * sin_y
+		rz := corner.x * sin_y + corner.z * cos_y
+		world_min.x = min(world_min.x, rx)
+		world_min.y = min(world_min.y, corner.y)
+		world_min.z = min(world_min.z, rz)
+		world_max.x = max(world_max.x, rx)
+		world_max.y = max(world_max.y, corner.y)
+		world_max.z = max(world_max.z, rz)
+	}
+
+	return collision.AABB{min = world_min, max = world_max}
+}
+
+@(private="file")
+placement_yaw_deg :: proc(transform: render.Transform) -> f32 {
+	q: math3d.Quat
+	q.x = transform.rotation[0]
+	q.y = transform.rotation[1]
+	q.z = transform.rotation[2]
+	q.w = transform.rotation[3]
+	// Y-up yaw from quaternion: yaw = atan2(2(wy + xz), 1 - 2(y² + z²)) in radians.
+	siny_cosp := 2.0 * (q.w * q.y + q.x * q.z)
+	cosy_cosp := 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
+	return math.atan2(siny_cosp, cosy_cosp) / math3d.RAD_PER_DEG
+}
+
+@(private="file")
+collider_for_placement :: proc(placement: Placement) -> collision.AABB {
+	yaw := placement_yaw_deg(placement.transform)
+	local_min, local_max: math3d.Vec3
+	switch placement.kind {
+	case .Floor:
+		return {}
+	case .Wall:
+		local_min = WALL_LOCAL_MIN
+		local_max = WALL_LOCAL_MAX
+	case .WallCorner:
+		local_min = CORNER_LOCAL_MIN
+		local_max = CORNER_LOCAL_MAX
+	}
+
+	bounds := transform_bounds_yaw(local_min, local_max, yaw)
+	offset := placement.transform.position
+	bounds.min.x += offset[0]
+	bounds.min.y += offset[1]
+	bounds.min.z += offset[2]
+	bounds.max.x += offset[0]
+	bounds.max.y += offset[1]
+	bounds.max.z += offset[2]
+	return bounds
+}
+
+room_wall_colliders :: proc(allocator := context.allocator) -> []collision.AABB {
+	placements := build_placements(context.temp_allocator)
+	colliders := make([dynamic]collision.AABB, allocator)
+	for placement in placements {
+		if placement.kind == .Floor {
+			continue
+		}
+		append(&colliders, collider_for_placement(placement))
+	}
+	return colliders[:]
 }
 
 resolve_asset_path :: proc(relative: string, allocator := context.temp_allocator) -> cstring {

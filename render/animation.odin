@@ -1,5 +1,6 @@
 package render
 
+import "core:fmt"
 import "core:math"
 import "core:math/linalg"
 import "core:strings"
@@ -7,6 +8,8 @@ import "core:strings"
 import "../math3d"
 
 MAX_JOINTS :: 64
+WALK_STRIDE_SAMPLES :: 48
+MIN_WALK_SPEED :: f32(0.1)
 
 AnimPath :: enum {
 	Translation,
@@ -306,4 +309,158 @@ compute_joint_matrices :: proc(
 		out[i] = math3d.mul(global, rig.inverse_bind_matrices[i])
 	}
 	return count
+}
+
+find_node_index_by_name :: proc(node_names: []string, name: string) -> int {
+	lower := strings.to_lower(name, context.temp_allocator)
+	for node_name, i in node_names {
+		if strings.to_lower(node_name, context.temp_allocator) == lower {
+			return i
+		}
+	}
+	return -1
+}
+
+@(private="file")
+sample_global_xz :: proc(
+	rest_poses: []NodePose,
+	node_index: int,
+	clip: AnimationClip,
+	time: f32,
+) -> (f32, f32, bool) {
+	if node_index < 0 || node_index >= len(rest_poses) {
+		return 0, 0, false
+	}
+
+	poses := make([]NodePose, len(rest_poses), context.temp_allocator)
+	copy(poses, rest_poses)
+	sample_clip(clip, time, poses)
+
+	locals := make([]math3d.Mat4, len(poses), context.temp_allocator)
+	for i in 0 ..< len(poses) {
+		locals[i] = pose_local_matrix(poses[i])
+	}
+
+	globals := make([]math3d.Mat4, len(poses), context.temp_allocator)
+	visited := make([]bool, len(poses), context.temp_allocator)
+	for i in 0 ..< len(poses) {
+		compute_global_transform(i, poses, locals, globals, visited)
+	}
+
+	global := globals[node_index]
+	x := global[0][3]
+	z := global[2][3]
+	if x == 0 && z == 0 && (global[3][0] != 0 || global[3][2] != 0) {
+		x = global[3][0]
+		z = global[3][2]
+	}
+	return x, z, true
+}
+
+@(private="file")
+root_translation_stride_xz :: proc(clip: AnimationClip) -> f32 {
+	best: f32 = 0
+	for channel in clip.channels {
+		if channel.path != .Translation {
+			continue
+		}
+		key_count := len(channel.key_times)
+		if key_count < 2 {
+			continue
+		}
+		base := 0
+		end := key_count - 1
+		if base * 3 + 2 >= len(channel.key_values) || end * 3 + 2 >= len(channel.key_values) {
+			continue
+		}
+		dx := channel.key_values[end * 3 + 0] - channel.key_values[base * 3 + 0]
+		dz := channel.key_values[end * 3 + 2] - channel.key_values[base * 3 + 2]
+		dist := math.sqrt(dx * dx + dz * dz)
+		if dist > best {
+			best = dist
+		}
+	}
+	return best
+}
+
+@(private="file")
+foot_forward_stride :: proc(
+	rest_poses: []NodePose,
+	node_names: []string,
+	clip: AnimationClip,
+	foot_name: string,
+	hips_index: int,
+) -> f32 {
+	foot_index := find_node_index_by_name(node_names, foot_name)
+	if foot_index < 0 || hips_index < 0 || clip.duration <= 0 {
+		return 0
+	}
+
+	min_offset: f32 = 0
+	max_offset: f32 = 0
+	found := false
+
+	for i in 0 ..= WALK_STRIDE_SAMPLES {
+		t := clip.duration * f32(i) / f32(WALK_STRIDE_SAMPLES)
+		foot_x, foot_z, foot_ok := sample_global_xz(rest_poses, foot_index, clip, t)
+		hip_x, hip_z, hip_ok := sample_global_xz(rest_poses, hips_index, clip, t)
+		if !foot_ok || !hip_ok {
+			continue
+		}
+
+		// Model forward is +Z; measure foot excursion relative to hips.
+		offset := foot_z - hip_z
+		if !found {
+			min_offset = offset
+			max_offset = offset
+			found = true
+		} else {
+			min_offset = min(min_offset, offset)
+			max_offset = max(max_offset, offset)
+		}
+		_ = foot_x
+		_ = hip_x
+		_ = hip_z
+	}
+
+	if !found {
+		return 0
+	}
+	result := max_offset - min_offset
+	return result
+}
+
+// Stride per walk cycle from foot/hip joint sampling; speed = stride / clip.duration.
+derive_walk_speed :: proc(
+	clip: AnimationClip,
+	rest_poses: []NodePose,
+	node_names: []string,
+) -> f32 {
+	if clip.duration <= 0 {
+		return MIN_WALK_SPEED
+	}
+
+	stride := root_translation_stride_xz(clip)
+	if stride <= 0.001 {
+		hips_index := find_node_index_by_name(node_names, "hips")
+		if hips_index < 0 {
+			hips_index = find_node_index_by_name(node_names, "root")
+		}
+		stride = foot_forward_stride(rest_poses, node_names, clip, "foot.l", hips_index)
+		stride += foot_forward_stride(rest_poses, node_names, clip, "foot.r", hips_index)
+	}
+
+	if stride <= 0.001 {
+		return MIN_WALK_SPEED
+	}
+
+	speed := stride / clip.duration
+	fmt.println(fmt.tprintf(
+		"Derived walk speed from %s: stride=%.3f duration=%.3f speed=%.3f u/s",
+		clip.name,
+		stride,
+		clip.duration,
+		speed,
+	))
+	return speed
 }

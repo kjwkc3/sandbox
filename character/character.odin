@@ -6,6 +6,7 @@ import "core:os"
 import "core:path/filepath"
 import "core:strings"
 
+import "../collision"
 import "../math3d"
 import "../render"
 
@@ -15,18 +16,15 @@ KNIGHT_MESH :: "assets/character/meshes/Knight.glb"
 FOOT_OFFSET_Y :: f32(1.12)
 CHARACTER_YAW :: f32(0)
 CHARACTER_SCALE :: f32(1.0)
-// ~15 u/s crosses the 16-unit walkable floor in ~1.1 s — ARPG sweet spot between
-// the old broken crawl and the initial 18 u/s post-dt-fix tuning.
-MOVE_SPEED :: f32(15.0)
 TURN_STIFFNESS :: f32(12.0)
 MOVE_EPSILON :: f32(0.001)
-// Walking_A at 1× playback matches ~15 u/s stride; scale if MOVE_SPEED changes.
-WALK_ANIM_SPEED_SCALE :: MOVE_SPEED / 15.0
 
 Character :: struct {
-	model:    render.SkinnedModel,
-	position: math3d.Vec3,
-	yaw:      f32,
+	model:              render.SkinnedModel,
+	position:           math3d.Vec3,
+	yaw:                f32,
+	move_speed:         f32,
+	derived_walk_speed: f32,
 }
 
 resolve_asset_path :: proc(relative: string, allocator := context.temp_allocator) -> cstring {
@@ -57,11 +55,29 @@ load_character :: proc(cache: ^render.TextureCache, allocator := context.allocat
 		fmt.println("Failed to load knight character")
 		return {}, false
 	}
+
+	derived_speed: f32 = 1.0
+	if model.walk_clip_index >= 0 && model.walk_clip_index < len(model.clips) {
+		walk_clip := model.clips[model.walk_clip_index]
+		derived_speed = render.derive_walk_speed(walk_clip, model.rest_poses, model.node_names)
+	} else {
+		fmt.println("Warning: walk clip not found; using default move speed")
+	}
+
 	return Character{
 		model = model,
 		position = {8, FOOT_OFFSET_Y, 8},
 		yaw = CHARACTER_YAW,
+		move_speed = derived_speed,
+		derived_walk_speed = derived_speed,
 	}, true
+}
+
+walk_anim_speed_scale :: proc(c: Character) -> f32 {
+	if c.derived_walk_speed <= MOVE_EPSILON {
+		return 1.0
+	}
+	return c.move_speed / c.derived_walk_speed
 }
 
 character_transform :: proc(c: Character) -> render.Transform {
@@ -81,7 +97,12 @@ smooth_yaw_toward :: proc(c: ^Character, target_yaw: f32, dt: f32) {
 	c.yaw += diff * turn_factor
 }
 
-move_character :: proc(c: ^Character, move_dir: math3d.Vec3, dt: f32) -> bool {
+move_character :: proc(
+	c: ^Character,
+	move_dir: math3d.Vec3,
+	dt: f32,
+	walls: []collision.AABB,
+) -> bool {
 	dir := move_dir
 	dir.y = 0
 
@@ -93,11 +114,13 @@ move_character :: proc(c: ^Character, move_dir: math3d.Vec3, dt: f32) -> bool {
 
 		old_x, old_z := c.position.x, c.position.z
 
-		c.position.x += dir.x * MOVE_SPEED * dt
-		c.position.z += dir.z * MOVE_SPEED * dt
+		delta_x := dir.x * c.move_speed * dt
+		delta_z := dir.z * c.move_speed * dt
 
-		c.position.x = math.clamp(c.position.x, -1, 17)
-		c.position.z = math.clamp(c.position.z, -1, 17)
+		capsule := collision.make_capsule_at(old_x, old_z)
+		resolved := collision.resolve_capsule_xz_move(capsule, walls, delta_x, delta_z)
+		c.position.x = resolved.x
+		c.position.z = resolved.z
 
 		dx := c.position.x - old_x
 		dz := c.position.z - old_z
@@ -152,7 +175,7 @@ draw_character :: proc(
 
 	playback_time := anim_time
 	if is_moving {
-		playback_time *= WALK_ANIM_SPEED_SCALE
+		playback_time *= walk_anim_speed_scale(character)
 	}
 
 	joint_matrices: [render.MAX_JOINTS]math3d.Mat4

@@ -1,6 +1,7 @@
 package render
 
 import "core:math"
+import "core:math/linalg"
 
 import "../math3d"
 
@@ -68,4 +69,48 @@ rotate_around_target :: proc(cam: Camera, angle_deg: f32) -> Camera {
 
 	result.position = result.target + math3d.Vec3{new_x, offset[1], new_z}
 	return result
+}
+
+// screen_to_ground unprojects a screen pixel onto the XZ plane at ground_y.
+screen_to_ground :: proc(
+	cam: Camera,
+	screen_x, screen_y: f32,
+	width, height: u32,
+	ground_y: f32,
+) -> (math3d.Vec3, bool) {
+	if width == 0 || height == 0 {
+		return {}, false
+	}
+
+	ndc_x := (2.0 * screen_x / f32(width)) - 1.0
+	ndc_y := 1.0 - (2.0 * screen_y / f32(height))
+
+	view := view_matrix(cam)
+	proj := projection_matrix(cam)
+	inv_vp := linalg.matrix4_inverse_f32(proj * view)
+
+	unproject :: proc(inv: math3d.Mat4, x, y, z: f32) -> math3d.Vec3 {
+		clip := linalg.Vector4f32{x, y, z, 1}
+		world := inv * clip
+		if world.w == 0 {
+			return {}
+		}
+		inv_w := 1.0 / world.w
+		return {world.x * inv_w, world.y * inv_w, world.z * inv_w}
+	}
+
+	near_pt := unproject(inv_vp, ndc_x, ndc_y, -1)
+	far_pt := unproject(inv_vp, ndc_x, ndc_y, 1)
+
+	ray_dir := far_pt - near_pt
+	if math.abs(ray_dir.y) < 0.0001 {
+		return {}, false
+	}
+
+	t := (ground_y - near_pt.y) / ray_dir.y
+	if t < 0 {
+		return {}, false
+	}
+
+	return near_pt + ray_dir * t, true
 }

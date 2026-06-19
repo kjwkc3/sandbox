@@ -64,6 +64,19 @@ character_transform :: proc(c: Character) -> render.Transform {
 	return render.transform_with_yaw(c.position, c.yaw)
 }
 
+@(private="file")
+smooth_yaw_toward :: proc(c: ^Character, target_yaw: f32, dt: f32) {
+	diff := target_yaw - c.yaw
+	for diff > 180 {
+		diff -= 360
+	}
+	for diff < -180 {
+		diff += 360
+	}
+	turn_factor := 1.0 - math.exp(-TURN_STIFFNESS * dt)
+	c.yaw += diff * turn_factor
+}
+
 move_character :: proc(c: ^Character, move_dir: math3d.Vec3, dt: f32) -> bool {
 	dir := move_dir
 	dir.y = 0
@@ -82,17 +95,6 @@ move_character :: proc(c: ^Character, move_dir: math3d.Vec3, dt: f32) -> bool {
 		c.position.x = math.clamp(c.position.x, -1, 17)
 		c.position.z = math.clamp(c.position.z, -1, 17)
 
-		target_yaw := math.atan2(dir.x, dir.z) / math3d.RAD_PER_DEG
-		diff := target_yaw - c.yaw
-		for diff > 180 {
-			diff -= 360
-		}
-		for diff < -180 {
-			diff += 360
-		}
-		turn_factor := 1.0 - math.exp(-TURN_STIFFNESS * dt)
-		c.yaw += diff * turn_factor
-
 		dx := c.position.x - old_x
 		dz := c.position.z - old_z
 		c.position.y = FOOT_OFFSET_Y
@@ -101,6 +103,27 @@ move_character :: proc(c: ^Character, move_dir: math3d.Vec3, dt: f32) -> bool {
 
 	c.position.y = FOOT_OFFSET_Y
 	return false
+}
+
+face_toward_point :: proc(c: ^Character, target: math3d.Vec3, dt: f32) {
+	dx := target.x - c.position.x
+	dz := target.z - c.position.z
+	if dx * dx + dz * dz <= MOVE_EPSILON * MOVE_EPSILON {
+		return
+	}
+	target_yaw := math.atan2(dx, dz) / math3d.RAD_PER_DEG
+	smooth_yaw_toward(c, target_yaw, dt)
+}
+
+face_toward_dir :: proc(c: ^Character, dir: math3d.Vec3, dt: f32) {
+	d := dir
+	d.y = 0
+	len_sq := d.x * d.x + d.z * d.z
+	if len_sq <= MOVE_EPSILON * MOVE_EPSILON {
+		return
+	}
+	target_yaw := math.atan2(d.x, d.z) / math3d.RAD_PER_DEG
+	smooth_yaw_toward(c, target_yaw, dt)
 }
 
 draw_character :: proc(

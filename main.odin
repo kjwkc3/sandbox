@@ -109,7 +109,7 @@ main :: proc() {
 	manual_frame_count := 0
 	anim_time: f32 = 0
 
-	fmt.println("WASD to move, F1 for FPS, F2 to capture PNG, ESC to quit")
+	fmt.println("WASD to move, mouse to aim, F1 for FPS, F2 to capture PNG, ESC to quit")
 
 	show_fps := false
 	last_ticks := sdl2.GetTicks()
@@ -119,12 +119,15 @@ main :: proc() {
 
 	running := true
 	for running {
-		now := sdl2.GetTicks()
+		frame_start := sdl2.GetTicks()
 		dt: f32
 		if capture_on_startup {
 			dt = CAPTURE_DT
 		} else {
-			elapsed_frame := now - last_frame_ticks
+			elapsed_frame := frame_start - last_frame_ticks
+			if elapsed_frame <= 0 {
+				elapsed_frame = 1
+			}
 			dt = f32(elapsed_frame) / 1000.0
 			if dt > 0.1 {
 				dt = 0.1
@@ -163,7 +166,7 @@ main :: proc() {
 			angle := f32(captured_frames) * 0.35
 			move_dir = {math.cos(angle), 0, math.sin(angle)}
 		} else {
-			keyboard := sdl2.GetKeyboardState(nil)
+			keyboard := sdl2.GetKeyboardStateAsSlice()
 			cam_forward := camera.target - camera.position
 			cam_forward.y = 0
 			forward_len_sq := cam_forward.x * cam_forward.x + cam_forward.z * cam_forward.z
@@ -194,10 +197,27 @@ main :: proc() {
 
 		is_moving := character.move_character(&knight, move_dir, dt)
 
+		if capture_on_startup {
+			character.face_toward_dir(&knight, move_dir, dt)
+		} else {
+			mouse_x, mouse_y: i32
+			_ = sdl2.GetMouseState(&mouse_x, &mouse_y)
+			if aim_point, aim_ok := render.screen_to_ground(
+				camera,
+				f32(mouse_x),
+				f32(mouse_y),
+				u32(draw_w),
+				u32(draw_h),
+				0,
+			); aim_ok {
+				character.face_toward_point(&knight, aim_point, dt)
+			}
+		}
+
 		focus := math3d.Vec3{knight.position.x, 0, knight.position.z}
 		render.camera_follow(&camera, focus, CAMERA_OFFSET, dt, render.CAM_FOLLOW_STIFFNESS)
 
-		now = sdl2.GetTicks()
+		now := sdl2.GetTicks()
 		if show_fps {
 			fps_frame_count += 1
 			elapsed := now - last_ticks
@@ -237,9 +257,9 @@ main :: proc() {
 
 		anim_time += dt
 		if !capture_on_startup {
-			elapsed_frame := sdl2.GetTicks() - now
-			if elapsed_frame < FRAME_MS {
-				sdl2.Delay(FRAME_MS - elapsed_frame)
+			frame_elapsed := sdl2.GetTicks() - frame_start
+			if frame_elapsed < FRAME_MS {
+				sdl2.Delay(FRAME_MS - frame_elapsed)
 			}
 			last_frame_ticks = sdl2.GetTicks()
 		}

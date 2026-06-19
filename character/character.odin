@@ -59,7 +59,12 @@ load_character :: proc(cache: ^render.TextureCache, allocator := context.allocat
 	derived_speed: f32 = 1.0
 	if model.walk_clip_index >= 0 && model.walk_clip_index < len(model.clips) {
 		walk_clip := model.clips[model.walk_clip_index]
-		derived_speed = render.derive_walk_speed(walk_clip, model.rest_poses, model.node_names)
+		derived_speed = render.derive_walk_speed(
+			walk_clip,
+			model.rest_poses,
+			model.node_names,
+			CHARACTER_SCALE,
+		)
 	} else {
 		fmt.println("Warning: walk clip not found; using default move speed")
 	}

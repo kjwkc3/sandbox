@@ -10,6 +10,8 @@ import "../math3d"
 MAX_JOINTS :: 64
 WALK_STRIDE_SAMPLES :: 48
 MIN_WALK_SPEED :: f32(0.1)
+// KayKit rig bones are short; skinned Knight mesh bind height is ~2.36 world units.
+REFERENCE_CHARACTER_HEIGHT :: f32(2.36)
 
 AnimPath :: enum {
 	Translation,
@@ -322,14 +324,43 @@ find_node_index_by_name :: proc(node_names: []string, name: string) -> int {
 }
 
 @(private="file")
-sample_global_xz :: proc(
+matrix_translation :: proc(m: math3d.Mat4) -> math3d.Vec3 {
+	return {m[3][0], m[3][1], m[3][2]}
+}
+
+@(private="file")
+sample_rest_global_position :: proc(
+	rest_poses: []NodePose,
+	node_index: int,
+) -> (math3d.Vec3, bool) {
+	if node_index < 0 || node_index >= len(rest_poses) {
+		return {}, false
+	}
+
+	locals := make([]math3d.Mat4, len(rest_poses), context.temp_allocator)
+	for i in 0 ..< len(rest_poses) {
+		locals[i] = pose_local_matrix(rest_poses[i])
+	}
+
+	globals := make([]math3d.Mat4, len(rest_poses), context.temp_allocator)
+	visited := make([]bool, len(rest_poses), context.temp_allocator)
+	for i in 0 ..< len(rest_poses) {
+		compute_global_transform(i, rest_poses, locals, globals, visited)
+	}
+
+	global := globals[node_index]
+	return matrix_translation(global), true
+}
+
+@(private="file")
+sample_global_position :: proc(
 	rest_poses: []NodePose,
 	node_index: int,
 	clip: AnimationClip,
 	time: f32,
-) -> (f32, f32, bool) {
+) -> (math3d.Vec3, bool) {
 	if node_index < 0 || node_index >= len(rest_poses) {
-		return 0, 0, false
+		return {}, false
 	}
 
 	poses := make([]NodePose, len(rest_poses), context.temp_allocator)
@@ -348,50 +379,74 @@ sample_global_xz :: proc(
 	}
 
 	global := globals[node_index]
-	x := global[0][3]
-	z := global[2][3]
-	if x == 0 && z == 0 && (global[3][0] != 0 || global[3][2] != 0) {
-		x = global[3][0]
-		z = global[3][2]
-	}
-	return x, z, true
+	return matrix_translation(global), true
 }
 
 @(private="file")
-root_translation_stride_xz :: proc(clip: AnimationClip) -> f32 {
-	best: f32 = 0
-	for channel in clip.channels {
-		if channel.path != .Translation {
-			continue
-		}
-		key_count := len(channel.key_times)
-		if key_count < 2 {
-			continue
-		}
-		base := 0
-		end := key_count - 1
-		if base * 3 + 2 >= len(channel.key_values) || end * 3 + 2 >= len(channel.key_values) {
-			continue
-		}
-		dx := channel.key_values[end * 3 + 0] - channel.key_values[base * 3 + 0]
-		dz := channel.key_values[end * 3 + 2] - channel.key_values[base * 3 + 2]
-		dist := math.sqrt(dx * dx + dz * dz)
-		if dist > best {
-			best = dist
-		}
-	}
-	return best
+sample_global_xz :: proc(
+	rest_poses: []NodePose,
+	node_index: int,
+	clip: AnimationClip,
+	time: f32,
+) -> (f32, f32, bool) {
+	pos, ok := sample_global_position(rest_poses, node_index, clip, time)
+	return pos.x, pos.z, ok
 }
 
 @(private="file")
-foot_forward_stride :: proc(
+find_foot_node_index :: proc(node_names: []string, side: rune) -> int {
+	toe_name := side == 'l' ? "toes.l" : "toes.r"
+	foot_name := side == 'l' ? "foot.l" : "foot.r"
+	if idx := find_node_index_by_name(node_names, toe_name); idx >= 0 {
+		return idx
+	}
+	return find_node_index_by_name(node_names, foot_name)
+}
+
+// Map rig bone units to world units via standing height vs skeleton leg length.
+@(private="file")
+derive_rig_to_world_scale :: proc(
 	rest_poses: []NodePose,
 	node_names: []string,
-	clip: AnimationClip,
-	foot_name: string,
-	hips_index: int,
+	reference_height: f32,
 ) -> f32 {
-	foot_index := find_node_index_by_name(node_names, foot_name)
+	hips_index := find_node_index_by_name(node_names, "hips")
+	foot_index := find_node_index_by_name(node_names, "foot.l")
+	if foot_index < 0 {
+		foot_index = find_node_index_by_name(node_names, "foot.r")
+	}
+	if hips_index < 0 || foot_index < 0 {
+		return 1.0
+	}
+
+	hip_pos, hip_ok := sample_rest_global_position(rest_poses, hips_index)
+	foot_pos, foot_ok := sample_rest_global_position(rest_poses, foot_index)
+	if !hip_ok || !foot_ok {
+		return 1.0
+	}
+
+	dx := hip_pos.x - foot_pos.x
+	dy := hip_pos.y - foot_pos.y
+	dz := hip_pos.z - foot_pos.z
+	leg_length := math.abs(dy)
+	if leg_length <= 0.001 {
+		leg_length = math.sqrt(dx * dx + dy * dy + dz * dz)
+	}
+	if leg_length <= 0.001 {
+		return 1.0
+	}
+	return reference_height / leg_length
+}
+
+// Forward (Z) swing relative to hips during one cycle — one step length per foot.
+@(private="file")
+foot_forward_step_z :: proc(
+	rest_poses: []NodePose,
+	node_names: []string,
+	foot_index: int,
+	hips_index: int,
+	clip: AnimationClip,
+) -> f32 {
 	if foot_index < 0 || hips_index < 0 || clip.duration <= 0 {
 		return 0
 	}
@@ -402,14 +457,13 @@ foot_forward_stride :: proc(
 
 	for i in 0 ..= WALK_STRIDE_SAMPLES {
 		t := clip.duration * f32(i) / f32(WALK_STRIDE_SAMPLES)
-		foot_x, foot_z, foot_ok := sample_global_xz(rest_poses, foot_index, clip, t)
-		hip_x, hip_z, hip_ok := sample_global_xz(rest_poses, hips_index, clip, t)
+		foot_pos, foot_ok := sample_global_position(rest_poses, foot_index, clip, t)
+		hip_pos, hip_ok := sample_global_position(rest_poses, hips_index, clip, t)
 		if !foot_ok || !hip_ok {
 			continue
 		}
 
-		// Model forward is +Z; measure foot excursion relative to hips.
-		offset := foot_z - hip_z
+		offset := foot_pos.z - hip_pos.z
 		if !found {
 			min_offset = offset
 			max_offset = offset
@@ -418,47 +472,128 @@ foot_forward_stride :: proc(
 			min_offset = min(min_offset, offset)
 			max_offset = max(max_offset, offset)
 		}
-		_ = foot_x
-		_ = hip_x
-		_ = hip_z
 	}
 
 	if !found {
 		return 0
 	}
-	result := max_offset - min_offset
-	return result
+	return max_offset - min_offset
 }
 
-// Stride per walk cycle from foot/hip joint sampling; speed = stride / clip.duration.
+// Max XZ displacement from bind-pose rest for one foot/toe over the clip.
+@(private="file")
+foot_xz_excursion :: proc(
+	rest_poses: []NodePose,
+	foot_index: int,
+	clip: AnimationClip,
+) -> f32 {
+	if foot_index < 0 || clip.duration <= 0 {
+		return 0
+	}
+
+	rest_pos, rest_ok := sample_rest_global_position(rest_poses, foot_index)
+	if !rest_ok {
+		return 0
+	}
+	rest_x := rest_pos.x
+	rest_z := rest_pos.z
+
+	max_excursion: f32 = 0
+	for i in 0 ..= WALK_STRIDE_SAMPLES {
+		t := clip.duration * f32(i) / f32(WALK_STRIDE_SAMPLES)
+		pos, ok := sample_global_position(rest_poses, foot_index, clip, t)
+		if !ok {
+			continue
+		}
+		dx := pos.x - rest_x
+		dz := pos.z - rest_z
+		excursion := math.sqrt(dx * dx + dz * dz)
+		max_excursion = max(max_excursion, excursion)
+	}
+	return max_excursion
+}
+
+// In-place walk: one cycle advances by both feet's peak forward steps.
+@(private="file")
+foot_cycle_stride_bone_units :: proc(
+	rest_poses: []NodePose,
+	node_names: []string,
+	clip: AnimationClip,
+) -> f32 {
+	hips_index := find_node_index_by_name(node_names, "hips")
+	if hips_index < 0 {
+		hips_index = find_node_index_by_name(node_names, "root")
+	}
+
+	left_index := find_foot_node_index(node_names, 'l')
+	right_index := find_foot_node_index(node_names, 'r')
+
+	// Prefer toe contact bones; measure forward step relative to hips per foot.
+	left_step := foot_forward_step_z(rest_poses, node_names, left_index, hips_index, clip)
+	right_step := foot_forward_step_z(rest_poses, node_names, right_index, hips_index, clip)
+	stride := left_step + right_step
+
+	if stride > 0.001 {
+		return stride
+	}
+
+	// Fallback: bind-pose XZ excursion summed for both feet.
+	left_excursion := foot_xz_excursion(rest_poses, left_index, clip)
+	right_excursion := foot_xz_excursion(rest_poses, right_index, clip)
+	if left_excursion <= 0.001 && right_excursion <= 0.001 {
+		return 0
+	}
+	return left_excursion + right_excursion
+}
+
+// In-place walk speed from toe/foot XZ excursion scaled to world units.
 derive_walk_speed :: proc(
 	clip: AnimationClip,
 	rest_poses: []NodePose,
 	node_names: []string,
+	character_scale: f32 = 1.0,
 ) -> f32 {
 	if clip.duration <= 0 {
 		return MIN_WALK_SPEED
 	}
 
-	stride := root_translation_stride_xz(clip)
-	if stride <= 0.001 {
-		hips_index := find_node_index_by_name(node_names, "hips")
-		if hips_index < 0 {
-			hips_index = find_node_index_by_name(node_names, "root")
-		}
-		stride = foot_forward_stride(rest_poses, node_names, clip, "foot.l", hips_index)
-		stride += foot_forward_stride(rest_poses, node_names, clip, "foot.r", hips_index)
-	}
-
-	if stride <= 0.001 {
+	stride_bone := foot_cycle_stride_bone_units(rest_poses, node_names, clip)
+	if stride_bone <= 0.001 {
+		fmt.println(fmt.tprintf(
+			"Warning: could not measure walk stride for %s; using minimum speed",
+			clip.name,
+		))
 		return MIN_WALK_SPEED
 	}
 
-	speed := stride / clip.duration
+	rig_to_world := derive_rig_to_world_scale(rest_poses, node_names, REFERENCE_CHARACTER_HEIGHT)
+	world_stride := stride_bone * rig_to_world * character_scale
+	speed := world_stride / clip.duration
+
+	left_name := "toes.l"
+	if find_node_index_by_name(node_names, left_name) < 0 {
+		left_name = "foot.l"
+	}
+	right_name := "toes.r"
+	if find_node_index_by_name(node_names, right_name) < 0 {
+		right_name = "foot.r"
+	}
+	left_idx := find_foot_node_index(node_names, 'l')
+	right_idx := find_foot_node_index(node_names, 'r')
+	hips_idx := find_node_index_by_name(node_names, "hips")
+	left_step := foot_forward_step_z(rest_poses, node_names, left_idx, hips_idx, clip)
+	right_step := foot_forward_step_z(rest_poses, node_names, right_idx, hips_idx, clip)
 	fmt.println(fmt.tprintf(
-		"Derived walk speed from %s: stride=%.3f duration=%.3f speed=%.3f u/s",
+		"Derived walk speed from %s: left(%s)=%.3f right(%s)=%.3f stride_bone=%.3f rig_scale=%.3f char_scale=%.3f world_stride=%.3f duration=%.3f speed=%.3f u/s",
 		clip.name,
-		stride,
+		left_name,
+		left_step,
+		right_name,
+		right_step,
+		stride_bone,
+		rig_to_world,
+		character_scale,
+		world_stride,
 		clip.duration,
 		speed,
 	))

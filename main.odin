@@ -4,9 +4,11 @@ import "core:c"
 import "core:fmt"
 import "core:os"
 import "core:path/filepath"
+import "core:strconv"
 import gl "vendor:OpenGL"
 import sdl2 "vendor:sdl2"
 
+import "character"
 import "png"
 import "render"
 import "room"
@@ -16,6 +18,8 @@ WINDOW_HEIGHT :: 600
 TARGET_FPS    :: 60
 FRAME_MS      :: 1000 / TARGET_FPS
 FRAME_DIR     :: "debug/frames"
+CAPTURE_DT    :: f32(1.0 / 24.0)
+DEFAULT_CAPTURE_FRAMES :: 24
 
 main :: proc() {
 	if sdl2.Init(sdl2.INIT_VIDEO) != 0 {
@@ -69,8 +73,17 @@ main :: proc() {
 	}
 	defer room.delete_room(dungeon_room)
 
-	shader := render.create_shader(render.MODEL_VERT, render.MODEL_FRAG)
-	defer render.delete_shader(shader)
+	knight, knight_ok := character.load_character(&texture_cache)
+	if !knight_ok {
+		panic("Failed to load knight character")
+	}
+	defer character.delete_character(knight)
+
+	room_shader := render.create_shader(render.MODEL_VERT, render.MODEL_FRAG)
+	defer render.delete_shader(room_shader)
+
+	skinned_shader := render.create_shader(render.SKINNED_VERT, render.MODEL_FRAG)
+	defer render.delete_shader(skinned_shader)
 
 	camera := room.room_camera(u32(draw_w), u32(draw_h))
 
@@ -81,8 +94,17 @@ main :: proc() {
 	defer delete(flipped)
 
 	capture_on_startup := os.get_env_alloc("SANDBOX_CAPTURE", context.temp_allocator) == "1"
-	captured_startup := false
-	frame_count := 0
+	capture_frame_target := DEFAULT_CAPTURE_FRAMES
+	if capture_on_startup {
+		if frames_env := os.get_env_alloc("SANDBOX_CAPTURE_FRAMES", context.temp_allocator); frames_env != "" {
+			if n, parsed := strconv.parse_int(frames_env); parsed && n > 0 {
+				capture_frame_target = n
+			}
+		}
+	}
+	captured_frames := 0
+	manual_frame_count := 0
+	anim_time: f32 = 0
 
 	fmt.println("F1 for FPS, F2 to capture PNG, ESC to quit")
 
@@ -113,9 +135,9 @@ main :: proc() {
 				} else if key == .F2 {
 					frame_dir := resolve_frame_dir()
 					_ = os.make_directory_all(frame_dir)
-					if capture_frame(pixels, flipped, draw_w, draw_h, frame_dir, frame_count) {
-						fmt.printf("Captured frame_%03d.png\n", frame_count)
-						frame_count += 1
+					if capture_frame(pixels, flipped, draw_w, draw_h, frame_dir, manual_frame_count) {
+						fmt.printf("Captured frame_%03d.png\n", manual_frame_count)
+						manual_frame_count += 1
 					}
 				}
 			}
@@ -135,26 +157,40 @@ main :: proc() {
 
 		gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
-		render.use_shader(shader)
-		room.draw_room(dungeon_room, shader, camera)
+		render.use_shader(room_shader)
+		room.draw_room(dungeon_room, room_shader, camera)
 
-		if capture_on_startup && !captured_startup {
+		render.use_shader(skinned_shader)
+		character.draw_character(knight, skinned_shader, camera, anim_time)
+
+		if capture_on_startup {
 			frame_dir := resolve_frame_dir()
 			_ = os.make_directory_all(frame_dir)
-			if capture_frame(pixels, flipped, draw_w, draw_h, frame_dir, 0) {
-				fmt.println("Startup capture: debug/frames/frame_000.png")
-				captured_startup = true
+			if capture_frame(pixels, flipped, draw_w, draw_h, frame_dir, captured_frames) {
+				fmt.printf("Startup capture: %s/frame_%03d.png\n", frame_dir, captured_frames)
+				captured_frames += 1
+				if captured_frames >= capture_frame_target {
+					running = false
+				}
+			} else {
+				fmt.eprintf("Startup capture: failed to write %s/frame_%03d.png\n", frame_dir, captured_frames)
+				capture_on_startup = false
 				running = false
 			}
 		}
 
 		sdl2.GL_SwapWindow(window)
 
-		elapsed_frame := sdl2.GetTicks() - last_frame_ticks
-		if elapsed_frame < FRAME_MS {
-			sdl2.Delay(FRAME_MS - elapsed_frame)
+		if capture_on_startup {
+			anim_time += CAPTURE_DT
+		} else {
+			elapsed_frame := sdl2.GetTicks() - last_frame_ticks
+			if elapsed_frame < FRAME_MS {
+				sdl2.Delay(FRAME_MS - elapsed_frame)
+			}
+			last_frame_ticks = sdl2.GetTicks()
+			anim_time += f32(elapsed_frame) / 1000.0
 		}
-		last_frame_ticks = sdl2.GetTicks()
 	}
 }
 
@@ -179,6 +215,12 @@ capture_frame :: proc(pixels, flipped: []u8, width, height: i32, frame_dir: stri
 
 resolve_frame_dir :: proc() -> string {
 	if exe_dir, err := os.get_executable_directory(context.temp_allocator); err == nil {
+		if filepath.base(exe_dir) == "build" {
+			project_dir := filepath.join({exe_dir, "..", "debug", "frames"}, context.temp_allocator) or_else ""
+			if project_dir != "" {
+				return project_dir
+			}
+		}
 		dir := filepath.join({exe_dir, "debug", "frames"}, context.temp_allocator) or_else ""
 		if dir != "" {
 			return dir

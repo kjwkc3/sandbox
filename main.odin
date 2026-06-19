@@ -192,10 +192,7 @@ main :: proc() {
 			}
 		}
 
-		character.move_character(&knight, move_dir, dt)
-
-		move_len_sq := move_dir.x * move_dir.x + move_dir.z * move_dir.z
-		is_moving := move_len_sq > character.MOVE_EPSILON * character.MOVE_EPSILON
+		is_moving := character.move_character(&knight, move_dir, dt)
 
 		focus := math3d.Vec3{knight.position.x, 0, knight.position.z}
 		render.camera_follow(&camera, focus, CAMERA_OFFSET, dt, render.CAM_FOLLOW_STIFFNESS)
